@@ -37,7 +37,7 @@ erp-fullstack/
 ### 1) Backend
 ```bash
 cd backend
-cp .env.example .env          # sửa DATABASE_URL, JWT_SECRET, SEED_ADMIN_PASSWORD
+cp .env.example .env          # sửa DATABASE_URL, JWT_SECRET, SEED_ADMIN_PASSWORD, PORT (mặc định 4000)
 npm install
 npm run db:schema             # tạo bảng
 npm run db:seed               # tạo roles/quyền/kho + tài khoản admin
@@ -51,6 +51,7 @@ cp .env.example .env          # VITE_API_URL=http://localhost:4000/api
 npm install
 npm run dev                   # http://localhost:5173
 ```
+
 Đăng nhập bằng tài khoản admin đã seed (username/mật khẩu lấy từ `backend/.env`).
 
 ## 15 yêu cầu được đáp ứng ở đâu
