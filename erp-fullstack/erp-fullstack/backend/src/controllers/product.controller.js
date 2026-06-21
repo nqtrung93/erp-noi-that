@@ -22,11 +22,13 @@ export const create = asyncHandler(async (req, res) => {
   const b = req.body || {};
   if (!b.name) throw badRequest("Thiếu tên sản phẩm");
   const result = await withTransaction(async (c) => {
+    const codeRow = await c.query(`SELECT 'SP-' || LPAD(nextval('product_seq')::text, 6, '0') AS code`);
     const p = (await c.query(
-      `INSERT INTO products (name, sku, category_id, supplier_id, has_variants, price, cost, image, options)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [b.name, b.sku || null, b.categoryId || null, b.supplierId || null,
-       !!b.hasVariants, b.price || 0, b.cost || 0, b.image || null, JSON.stringify(b.options || [])]
+      `INSERT INTO products (code, name, sku, category_id, supplier_id, has_variants, price, cost, image, options, warranty_content, warranty_months)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [codeRow.rows[0].code, b.name, b.sku || null, b.categoryId || null, b.supplierId || null,
+       !!b.hasVariants, b.price || 0, b.cost || 0, b.image || null, JSON.stringify(b.options || []),
+       b.warrantyContent || null, Number(b.warrantyMonths) || 0]
     )).rows[0];
 
     if (b.hasVariants && Array.isArray(b.variants)) {
@@ -47,19 +49,32 @@ export const update = asyncHandler(async (req, res) => {
   const b = req.body || {};
   const { rows } = await query(
     `UPDATE products SET name=COALESCE($1,name), sku=$2, category_id=$3, supplier_id=$4,
-        price=COALESCE($5,price), cost=COALESCE($6,cost), image=$7, options=COALESCE($8,options)
-      WHERE id=$9 RETURNING *`,
-    [b.name, b.sku || null, b.categoryId || null, b.supplierId || null,
-     b.price, b.cost, b.image || null, b.options ? JSON.stringify(b.options) : null, req.params.id]
+        has_variants=COALESCE($5,has_variants), active=COALESCE($6,active),
+        price=COALESCE($7,price), cost=COALESCE($8,cost), image=$9, options=COALESCE($10,options),
+        warranty_content=$11, warranty_months=COALESCE($12,warranty_months)
+      WHERE id=$13 RETURNING *`,
+    [b.name, b.sku || null, b.categoryId || null, b.supplierId || null, b.hasVariants, b.active,
+     b.price, b.cost, b.image || null, b.options ? JSON.stringify(b.options) : null,
+     b.warrantyContent ?? null, b.warrantyMonths != null ? Number(b.warrantyMonths) : null, req.params.id]
   );
   if (!rows.length) throw notFound();
   res.json(rows[0]);
 });
 
+// DELETE /api/products/:id → xoá cứng nếu chưa có lịch sử; nếu đã có (nhập/xuất/đơn hàng) thì tự chuyển sang ẨN.
 export const remove = asyncHandler(async (req, res) => {
-  const { rowCount } = await query(`DELETE FROM products WHERE id = $1`, [req.params.id]);
-  if (!rowCount) throw notFound();
-  res.status(204).end();
+  try {
+    const { rowCount } = await query(`DELETE FROM products WHERE id = $1`, [req.params.id]);
+    if (!rowCount) throw notFound();
+    res.status(204).end();
+  } catch (e) {
+    if (e.code === "23503") {
+      const { rows } = await query(`UPDATE products SET active=false WHERE id=$1 RETURNING *`, [req.params.id]);
+      if (!rows.length) throw notFound();
+      return res.json({ hidden: true, product: rows[0] });
+    }
+    throw e;
+  }
 });
 
 // ---- Variants CRUD ----

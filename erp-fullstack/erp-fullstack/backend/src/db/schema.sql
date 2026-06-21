@@ -191,6 +191,177 @@ ALTER TABLE orders
   ADD CONSTRAINT orders_ship_cost_voucher_fkey
   FOREIGN KEY (ship_cost_voucher) REFERENCES transactions(id);
 
+-- Liên kết phiếu nhập hàng với nhà cung cấp (để tính công nợ NCC)
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS supplier_id UUID REFERENCES suppliers(id);
+
+-- Danh sách đơn vị vận chuyển (để chọn khi tạo đơn + đối chiếu COD)
+CREATE TABLE IF NOT EXISTS carriers (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT UNIQUE NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Đã đối chiếu COD với đơn vị vận chuyển hay chưa
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cod_reconciled BOOLEAN NOT NULL DEFAULT false;
+
+-- Số phiếu nhập/điều chỉnh/luân chuyển (mỗi lần submit form = 1 phiếu, gồm nhiều dòng sản phẩm)
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS doc_no TEXT;
+CREATE SEQUENCE IF NOT EXISTS inbound_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS adjust_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS transfer_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS saleout_seq START 1; -- số phiếu xuất hàng (xuất bán theo đơn)
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS sale_doc_no TEXT;
+
+-- Backfill số phiếu xuất cho các đơn đã trừ tồn từ trước (chưa có sale_doc_no)
+WITH numbered AS (
+  SELECT id, 'PXH-' || LPAD(nextval('saleout_seq')::text, 6, '0') AS doc_no
+    FROM orders WHERE stock_applied = true AND sale_doc_no IS NULL
+   ORDER BY created_at
+)
+UPDATE orders o SET sale_doc_no = numbered.doc_no FROM numbered WHERE o.id = numbered.id;
+
+UPDATE stock_movements sm SET doc_no = o.sale_doc_no
+  FROM orders o
+ WHERE sm.ref_type = 'order' AND sm.ref_id = o.id AND sm.type = 'sale' AND sm.doc_no IS NULL AND o.sale_doc_no IS NOT NULL;
+
+-- Ẩn sản phẩm (soft-delete) thay vì xoá cứng khi đã có lịch sử nhập/xuất/đơn hàng
+ALTER TABLE products ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+
+-- Đơn đặt hàng khi tạo lúc không đủ tồn (vẫn tạo được, chỉ chặn khi thực sự xuất hàng)
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_preorder BOOLEAN NOT NULL DEFAULT false;
+-- Lý do huỷ/trả hàng
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
+
+-- Hạn thanh toán (số ngày) để tính tuổi nợ/quá hạn cho từng khách hàng
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS payment_term_days INTEGER NOT NULL DEFAULT 30;
+
+-- Mã khách hàng tự sinh (KH-000001...)
+CREATE SEQUENCE IF NOT EXISTS customer_seq START 1;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS code TEXT;
+UPDATE customers SET code = 'KH-' || LPAD(nextval('customer_seq')::text, 6, '0') WHERE code IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_code ON customers(code);
+
+-- Mã sản phẩm ngắn, dễ đọc (SP-000001...) thay cho UUID khi hiển thị/xuất-nhập CSV
+CREATE SEQUENCE IF NOT EXISTS product_seq START 1;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS code TEXT;
+UPDATE products SET code = 'SP-' || LPAD(nextval('product_seq')::text, 6, '0') WHERE code IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_products_code ON products(code);
+
+-- Nguồn đơn hàng (Hotline, Facebook, Tự gọi điện...) — danh sách tự quản lý, có sẵn 3 nguồn mặc định
+CREATE TABLE IF NOT EXISTS order_sources (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT UNIQUE NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO order_sources(name) VALUES ('Hotline'), ('Facebook'), ('Tự gọi điện') ON CONFLICT DO NOTHING;
+
+-- Shop bán hàng TMĐT (Shopee, Lazada, TikTok Shop...) — số lượng tự thêm/xoá, không cố định
+CREATE TABLE IF NOT EXISTS shops (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT UNIQUE NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO shops(name) VALUES ('Shop 1'), ('Shop 2'), ('Shop 3') ON CONFLICT DO NOTHING;
+
+-- Đơn hàng: nguồn đơn + đơn TMĐT (shop bán hàng + mã đơn từ sàn, khách hàng có thể để trống)
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_source TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_ecommerce BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES shops(id);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS external_order_code TEXT;
+
+-- Phiếu vận chuyển: TỰ ĐỘNG tạo 1 phiếu cho MỖI đơn hàng khi tạo đơn, để theo dõi tách biệt
+-- (số phiếu VC, ĐVVC, mã vận đơn, tiền COD...) nhưng vẫn liên kết 1-1 với đơn qua order_id.
+CREATE SEQUENCE IF NOT EXISTS shipment_seq START 1;
+CREATE TABLE IF NOT EXISTS shipments (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  doc_no          TEXT UNIQUE NOT NULL,
+  order_id        UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  carrier         TEXT,
+  tracking_no     TEXT,
+  cod_amount      NUMERIC(14,2) NOT NULL DEFAULT 0,
+  cod_reconciled  BOOLEAN NOT NULL DEFAULT false,
+  delivery_status TEXT NOT NULL DEFAULT 'Chưa giao',
+  ship_cost       NUMERIC(14,2) NOT NULL DEFAULT 0,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shipments_order ON shipments(order_id);
+ALTER TABLE shipments ADD COLUMN IF NOT EXISTS ship_cost_paid BOOLEAN NOT NULL DEFAULT false;
+
+-- Backfill: tạo phiếu vận chuyển cho các đơn đã có từ trước (giữ nguyên dữ liệu carrier/COD cũ trên orders)
+INSERT INTO shipments (doc_no, order_id, carrier, tracking_no, cod_amount, cod_reconciled, delivery_status, ship_cost)
+SELECT 'VC-' || LPAD(nextval('shipment_seq')::text, 6, '0'), o.id, o.carrier, o.tracking_no, o.cod_amount, o.cod_reconciled, o.delivery_status, o.ship_cost
+  FROM orders o
+ WHERE NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id);
+
+-- Cài đặt chung của hệ thống (key-value đơn giản) — dùng cho logo công ty (lưu base64) v.v.
+CREATE TABLE IF NOT EXISTS app_settings (
+  key         TEXT PRIMARY KEY,
+  value       TEXT
+);
+
+-- Phân quyền chi tiết theo module (Xem/Sửa/Xoá): chuyển các quyền cũ dạng "products"/"orders_edit"...
+-- sang dạng mới "<module>_view/_edit/_delete" để KHÔNG mất quyền của role đã cấu hình trước đó.
+DO $$
+DECLARE
+  -- (old_permission, new_permission) — quyền cũ dạng coarse => tương đương đầy đủ ở quyền mới
+  mapping TEXT[][] := ARRAY[
+    ARRAY['products','products_view'], ARRAY['products','products_edit'], ARRAY['products','products_delete'],
+    ARRAY['orders','orders_view'],
+    ARRAY['orders_edit','orders_edit'], ARRAY['orders_edit','orders_delete'],
+    ARRAY['crm','crm_view'], ARRAY['crm','crm_edit'], ARRAY['crm','crm_delete'],
+    ARRAY['suppliers','suppliers_view'], ARRAY['suppliers','suppliers_edit'], ARRAY['suppliers','suppliers_delete'],
+    ARRAY['warehouse','warehouse_view'], ARRAY['warehouse','warehouse_edit'],
+    ARRAY['finance','finance_view'], ARRAY['finance','finance_edit'], ARRAY['finance','finance_delete'],
+    ARRAY['vatinvoice','vatinvoice_view'], ARRAY['vatinvoice','vatinvoice_edit'],
+    ARRAY['shipping','shipping_view'], ARRAY['shipping','shipping_edit'], ARRAY['shipping','shipping_delete'],
+    ARRAY['employees','employees_view'], ARRAY['employees','employees_edit'], ARRAY['employees','employees_delete'],
+    -- Trước đây tab Cài đặt dùng tạm quyền "orders" hoặc "employees" để ẩn/hiện — giữ tương đương.
+    ARRAY['orders','settings_view'], ARRAY['orders','settings_edit'],
+    ARRAY['employees','settings_view'], ARRAY['employees','settings_edit']
+  ];
+  m TEXT[];
+BEGIN
+  FOREACH m SLICE 1 IN ARRAY mapping LOOP
+    INSERT INTO role_permissions(role, permission)
+      SELECT role, m[2] FROM role_permissions WHERE permission = m[1]
+      ON CONFLICT DO NOTHING;
+  END LOOP;
+  DELETE FROM role_permissions WHERE permission IN ('products','orders','crm','suppliers','warehouse','finance','vatinvoice','shipping','employees');
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_movements_ref ON stock_movements(ref_type, ref_id);
 CREATE INDEX IF NOT EXISTS idx_tx_ref ON transactions(ref_type, ref_id);
+
+-- ---------- Bảo hành: mỗi sản phẩm có 1 nội dung bảo hành + 1 thời hạn (tháng) ----------
+ALTER TABLE products ADD COLUMN IF NOT EXISTS warranty_content TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS warranty_months INTEGER NOT NULL DEFAULT 0;
+-- Cột cũ (dạng nhiều bộ phận) không dùng nữa — gỡ bỏ nếu còn tồn tại từ lần triển khai trước.
+ALTER TABLE products DROP COLUMN IF EXISTS warranty_parts;
+
+CREATE SEQUENCE IF NOT EXISTS warranty_seq START 1;
+CREATE TABLE IF NOT EXISTS warranties (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  doc_no          TEXT UNIQUE NOT NULL,
+  order_id        UUID REFERENCES orders(id) ON DELETE SET NULL,
+  order_item_id   UUID REFERENCES order_items(id) ON DELETE SET NULL,
+  product_id      UUID REFERENCES products(id),
+  variant_id      UUID REFERENCES product_variants(id),
+  product_name    TEXT NOT NULL,           -- snapshot tên SP (gồm biến thể) tại thời điểm bán
+  customer_id     UUID REFERENCES customers(id),
+  customer_name   TEXT,                    -- snapshot, đề phòng khách lẻ không có customer_id
+  customer_phone  TEXT,
+  start_date      DATE NOT NULL DEFAULT CURRENT_DATE,
+  parts           JSONB NOT NULL DEFAULT '[]',  -- [{name, months, expiresAt}]
+  note            TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_warranties_order ON warranties(order_id);
+CREATE INDEX IF NOT EXISTS idx_warranties_customer ON warranties(customer_id);
+CREATE INDEX IF NOT EXISTS idx_warranties_phone ON warranties(customer_phone);
+
+-- Cấp quyền Bảo hành (module mới) cho Admin để không bị khoá ngoài ngay sau khi triển khai.
+INSERT INTO role_permissions(role, permission)
+  SELECT 'Admin', p FROM (VALUES ('warranty_view'), ('warranty_edit')) AS t(p)
+  WHERE EXISTS (SELECT 1 FROM roles WHERE name = 'Admin')
+  ON CONFLICT DO NOTHING;

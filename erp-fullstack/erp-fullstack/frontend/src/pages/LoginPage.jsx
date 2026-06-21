@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useAuth } from "../store/auth.store.js";
+import { useEffect, useState } from "react";
+import { useAuth } from "../store/auth.store.jsx";
+import * as settingsService from "../services/settings.service.js";
 
 // KHÔNG có user/password hardcode. Form gửi lên backend /auth/login.
 export default function LoginPage() {
@@ -8,6 +9,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [logo, setLogo] = useState(null);
+
+  useEffect(() => { settingsService.getLogo().then((r) => setLogo(r.logo)).catch(() => {}); }, []);
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -22,9 +26,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <form onSubmit={onSubmit} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 w-full max-w-sm space-y-4">
-        <h1 className="text-xl font-bold text-slate-800">Đăng nhập ErgoERP</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 via-slate-50 to-slate-100 p-4">
+      <form onSubmit={onSubmit} className="bg-white rounded-2xl shadow-lg border border-slate-100 p-7 w-full max-w-sm space-y-4">
+        <div className="flex flex-col items-center gap-2 mb-2">
+          {logo
+            ? <img src={logo} alt="Logo" className="h-12 object-contain" />
+            : <div className="text-2xl font-bold text-teal-600 tracking-tight">CTH-GAMI ERP</div>}
+          <h1 className="text-sm text-slate-400">Đăng nhập để tiếp tục</h1>
+        </div>
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div>
           <label className="text-xs font-medium text-slate-500 block mb-1">Tài khoản</label>

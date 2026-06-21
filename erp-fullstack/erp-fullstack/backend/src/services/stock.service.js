@@ -27,11 +27,20 @@ export async function assertEnoughStock(client, warehouseId, items) {
   }
 }
 
+// Kiểm tra mềm: không ném lỗi, chỉ trả về true/false để quyết định tạo "phiếu đặt hàng" khi thiếu tồn.
+export async function hasEnoughStock(client, warehouseId, items) {
+  for (const it of items) {
+    const have = await getStock(client, it.productId, it.variantId ?? null, warehouseId);
+    if (have < it.qty) return false;
+  }
+  return true;
+}
+
 // Áp dụng thay đổi tồn + ghi 1 stock movement (#8/#9).
 // qtyChange âm = xuất bán, dương = hoàn về.
 export async function applyMovement(client, {
   productId, variantId = null, warehouseId, qtyChange,
-  type, refType = null, refId = null, reason = null, createdBy = null,
+  type, refType = null, refId = null, reason = null, createdBy = null, supplierId = null, docNo = null,
 }) {
   // Upsert tồn
   await client.query(
@@ -44,8 +53,8 @@ export async function applyMovement(client, {
   // Ghi movement (audit)
   await client.query(
     `INSERT INTO stock_movements
-       (product_id, variant_id, warehouse_id, qty_change, type, ref_type, ref_id, reason, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [productId, variantId, warehouseId, qtyChange, type, refType, refId, reason, createdBy]
+       (product_id, variant_id, warehouse_id, qty_change, type, ref_type, ref_id, reason, created_by, supplier_id, doc_no)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [productId, variantId, warehouseId, qtyChange, type, refType, refId, reason, createdBy, supplierId, docNo]
   );
 }

@@ -1,0 +1,10 @@
+import { api } from "../api/client.js";
+export const listEmployees = () => api.get("/users");
+export const createEmployee = (data) => api.post("/users", data);
+export const updateEmployee = (id, data) => api.put(`/users/${id}`, data);
+export const deleteEmployee = (id) => api.del(`/users/${id}`);
+export const listRoles = () => api.get("/roles");
+export const listRolesFull = () => api.get("/roles/full");
+export const createRole = (name) => api.post("/roles", { name });
+export const setRolePermissions = (role, permissions) => api.put(`/roles/${encodeURIComponent(role)}/permissions`, { permissions });
+export const listPermissions = () => api.get("/permissions");

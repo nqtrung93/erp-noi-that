@@ -7,10 +7,25 @@ import { pool, withTransaction } from "../config/db.js";
 dotenv.config();
 
 const ROLE_PERMS = {
-  "Admin": ["dashboard","products","orders","orders_edit","crm","suppliers","warehouse","finance","vatinvoice","shipping","reports","employees","view_cost","view_revenue"],
-  "Quản lý kho": ["dashboard","products","warehouse","shipping","reports","view_cost","view_revenue"],
-  "Nhân viên kho": ["products","warehouse","shipping","view_cost"],
-  "Nhân viên bán hàng": ["dashboard","orders","crm","vatinvoice","shipping"],
+  "Admin": [
+    "dashboard",
+    "products_view","products_edit","products_delete",
+    "orders_view","orders_edit","orders_delete",
+    "crm_view","crm_edit","crm_delete",
+    "suppliers_view","suppliers_edit","suppliers_delete",
+    "warehouse_view","warehouse_edit",
+    "finance_view","finance_edit","finance_delete",
+    "vatinvoice_view","vatinvoice_edit",
+    "shipping_view","shipping_edit","shipping_delete",
+    "reports",
+    "employees_view","employees_edit","employees_delete",
+    "settings_view","settings_edit",
+    "warranty_view","warranty_edit",
+    "view_cost","view_revenue",
+  ],
+  "Quản lý kho": ["dashboard","products_view","products_edit","warehouse_view","warehouse_edit","shipping_view","shipping_edit","reports","view_cost","view_revenue"],
+  "Nhân viên kho": ["products_view","warehouse_view","warehouse_edit","shipping_view","view_cost"],
+  "Nhân viên bán hàng": ["dashboard","orders_view","orders_edit","crm_view","crm_edit","vatinvoice_view","vatinvoice_edit","shipping_view","shipping_edit","warranty_view"],
 };
 
 const WAREHOUSES = [

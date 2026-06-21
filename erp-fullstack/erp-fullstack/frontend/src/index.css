@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Cuộn mượt bằng tay trên di động (nav tab, bảng cuộn ngang) + ẩn scrollbar cho gọn trên mobile,
+   vẫn giữ scroll bình thường trên desktop (chỉ ẩn thanh cuộn, không chặn tương tác). */
+.scroll-touch {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+@media (max-width: 640px) {
+  .scroll-touch::-webkit-scrollbar { height: 4px; }
+}
+
+/* Vùng chạm tối thiểu 40px theo khuyến nghị mobile UX, áp cho nút trong nav chính. */
+.tap-target { min-height: 40px; }
