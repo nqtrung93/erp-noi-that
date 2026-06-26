@@ -210,6 +210,9 @@ CREATE TABLE IF NOT EXISTS orders (
   created_by INTEGER REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS vat_rate NUMERIC(5,2) NOT NULL DEFAULT 0; -- % VAT áp dụng cho đơn này
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(18,2) NOT NULL DEFAULT 0; -- tiền VAT = (subtotal-discount) * vat_rate/100
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee NUMERIC(18,2) NOT NULL DEFAULT 0; -- phí ship thu thêm khách, cộng vào total
 
 CREATE TABLE IF NOT EXISTS order_items (
   id SERIAL PRIMARY KEY,

@@ -15,6 +15,8 @@ export const DEFAULT_INVOICE_TEMPLATE = `
   <p style="text-align:right; margin-top:12px;">
     Tạm tính: {{subtotal}} đ<br/>
     Giảm giá: {{discount}} đ<br/>
+    VAT ({{vatRate}}%): {{vatAmount}} đ<br/>
+    Phí ship: {{shippingFee}} đ<br/>
     <strong>Tổng cộng: {{total}} đ</strong><br/>
     Đã thanh toán: {{paid}} đ<br/>
     Còn lại: {{due}} đ
@@ -49,6 +51,9 @@ export async function renderInvoiceHtml(order, items) {
     rowsHtml,
     subtotal: Number(order.subtotal).toLocaleString("vi-VN"),
     discount: Number(order.discount).toLocaleString("vi-VN"),
+    vatRate: Number(order.vat_rate || 0),
+    vatAmount: Number(order.vat_amount || 0).toLocaleString("vi-VN"),
+    shippingFee: Number(order.shipping_fee || 0).toLocaleString("vi-VN"),
     total: Number(order.total).toLocaleString("vi-VN"),
     paid: Number(order.paid).toLocaleString("vi-VN"),
     due: due.toLocaleString("vi-VN"),

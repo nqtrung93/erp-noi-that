@@ -150,17 +150,22 @@ function WarehouseModal({ warehouse, onClose, onSaved }) {
 
 function CompanyInfoManager() {
   const [form, setForm] = useState({ name: "", address: "", phone: "", email: "" });
+  const [vatRate, setVatRate] = useState("0");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => { settingsService.getCompanyInfo().then(setForm).catch((e) => setError(e.message)); }, []);
+  useEffect(() => {
+    settingsService.getCompanyInfo().then(setForm).catch((e) => setError(e.message));
+    settingsService.getVatRate().then((r) => setVatRate(String(r.rate))).catch(() => {});
+  }, []);
 
   async function save(e) {
     e.preventDefault();
     setSaving(true); setSaved(false);
     try {
       await settingsService.updateCompanyInfo(form);
+      await settingsService.setVatRate(Number(vatRate) || 0);
       setSaved(true);
     } catch (e2) {
       setError(e2.message);
@@ -199,6 +204,12 @@ function CompanyInfoManager() {
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
+      <div>
+        <label className="text-xs text-slate-500">Tỷ lệ VAT mặc định (%)</label>
+        <input type="number" min="0" max="100" step="0.5" value={vatRate} onChange={(e) => setVatRate(e.target.value)}
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        <p className="text-xs text-slate-400 mt-1">Tự điền sẵn khi tạo đơn bán hàng — vẫn sửa được riêng từng đơn.</p>
+      </div>
       <button type="submit" disabled={saving}
         className="bg-sky-600 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">
         {saving ? "Đang lưu…" : "Lưu"}
@@ -207,7 +218,7 @@ function CompanyInfoManager() {
   );
 }
 
-const PLACEHOLDER_HINT = "{{companyName}} {{companyAddress}} {{companyPhone}} {{code}} {{date}} {{customerName}} {{rowsHtml}} {{subtotal}} {{discount}} {{total}} {{paid}} {{due}}";
+const PLACEHOLDER_HINT = "{{companyName}} {{companyAddress}} {{companyPhone}} {{code}} {{date}} {{customerName}} {{rowsHtml}} {{subtotal}} {{discount}} {{vatRate}} {{vatAmount}} {{shippingFee}} {{total}} {{paid}} {{due}}";
 
 function TemplatesManager() {
   const [html, setHtml] = useState("");

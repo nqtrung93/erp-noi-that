@@ -78,6 +78,21 @@ r.put("/settings/company", verifyToken, requirePerm("settings_edit"), asyncHandl
   res.json(info);
 }));
 
+// -------- VAT mặc định (áp dụng sẵn vào % VAT khi tạo đơn, có thể đổi tay từng đơn) --------
+r.get("/settings/vat-rate", verifyToken, requirePerm("settings_view"), asyncHandler(async (req, res) => {
+  const { rows } = await query(`SELECT value FROM app_settings WHERE key = 'vat_rate'`);
+  res.json({ rate: rows[0]?.value ? Number(rows[0].value) : 0 });
+}));
+r.put("/settings/vat-rate", verifyToken, requirePerm("settings_edit"), asyncHandler(async (req, res) => {
+  const rate = Number((req.body || {}).rate);
+  if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw badRequest("Tỷ lệ VAT phải từ 0-100");
+  await query(
+    `INSERT INTO app_settings(key, value) VALUES('vat_rate', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [String(rate)]
+  );
+  res.json({ rate });
+}));
+
 // -------- Kho hàng: sản phẩm (+ biến thể), kho, nhập/xuất/điều chỉnh/luân chuyển --------
 r.get("/products", verifyToken, requirePerm("inventory_view"), product.list);
 r.get("/products/:id", verifyToken, requirePerm("inventory_view"), product.getOne);
