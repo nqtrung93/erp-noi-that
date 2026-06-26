@@ -19,6 +19,9 @@ export const PERMISSION_MODULES = [
   { key: "orders", label: "Bán hàng", actions: [
     { key: "orders_view", label: "Xem" }, { key: "orders_edit", label: "Sửa/Thêm" },
   ] },
+  { key: "purchases", label: "Mua hàng", actions: [
+    { key: "purchases_view", label: "Xem" }, { key: "purchases_edit", label: "Sửa/Thêm" },
+  ] },
   { key: "partners", label: "Công nợ", actions: [
     { key: "partners_view", label: "Xem" }, { key: "partners_edit", label: "Sửa/Thêm" }, { key: "partners_delete", label: "Xoá" },
   ] },

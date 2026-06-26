@@ -28,6 +28,7 @@ export default function InventoryPage() {
   const [importResult, setImportResult] = useState(null);
   const [importingStock, setImportingStock] = useState(false);
   const [importStockResult, setImportStockResult] = useState(null);
+  const [stockSearch, setStockSearch] = useState("");
 
   async function reload() {
     try {
@@ -148,7 +149,6 @@ export default function InventoryPage() {
         actions={can("inventory_edit") && (
           <>
             <ToolbarButton onClick={() => setModal("product")}>+ Sản phẩm</ToolbarButton>
-            <ToolbarButton variant="success" onClick={() => setModal("inbound")}>+ Nhập hàng</ToolbarButton>
             <ToolbarButton variant="danger" onClick={() => setModal("outbound")}>+ Xuất hàng</ToolbarButton>
             <ToolbarButton onClick={() => setModal("adjust")}>Điều chỉnh</ToolbarButton>
             <ToolbarButton onClick={() => setModal("transfer")}>Luân chuyển</ToolbarButton>
@@ -189,14 +189,21 @@ export default function InventoryPage() {
       </div>
 
       {tab === "stock" && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
+        <div className="space-y-2">
+          <input value={stockSearch} onChange={(e) => setStockSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã SKU…"
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-full max-w-xs" />
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="text-left text-slate-400 text-xs">
               <th className="py-2 px-3">Mã SP</th><th className="py-2 px-3">Sản phẩm</th><th className="py-2 px-3">Kho</th>
               <th className="py-2 px-3 text-right">Tồn</th><th className="py-2 px-3">ĐVT</th><th className="py-2 px-3 text-right">Giá vốn</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {stock.map((s) => (
+              {stock.filter((s) => !stockSearch ||
+                s.product_name.toLowerCase().includes(stockSearch.toLowerCase()) ||
+                (s.sku || "").toLowerCase().includes(stockSearch.toLowerCase()) ||
+                (s.variant_sku || "").toLowerCase().includes(stockSearch.toLowerCase())
+              ).map((s) => (
                 <tr key={s.id}>
                   <td className="py-2 px-3">{s.variant_sku || s.sku || "—"}</td>
                   <td className="py-2 px-3">{s.product_name}{s.variant_attrs && <span className="text-slate-400"> ({attrsLabel(s.variant_attrs)})</span>}</td>
@@ -209,6 +216,7 @@ export default function InventoryPage() {
             </tbody>
           </table>
           {stock.length === 0 && <p className="text-slate-400 text-sm p-4">Chưa có tồn kho.</p>}
+          </div>
         </div>
       )}
 
@@ -274,7 +282,6 @@ export default function InventoryPage() {
       )}
 
       {modal === "product" && <ProductModal onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}
-      {modal === "inbound" && <StockMoveModal mode="inbound" products={products} warehouses={warehouses} partners={partners} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}
       {modal === "outbound" && <StockMoveModal mode="outbound" products={products} warehouses={warehouses} partners={partners} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}
       {modal === "adjust" && <AdjustModal products={products} warehouses={warehouses} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}
       {modal === "transfer" && <TransferModal products={products} warehouses={warehouses} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}

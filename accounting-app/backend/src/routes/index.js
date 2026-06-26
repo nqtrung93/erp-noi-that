@@ -8,6 +8,7 @@ import * as stock from "../controllers/stock.controller.js";
 import * as payroll from "../controllers/payroll.controller.js";
 import * as bank from "../controllers/bank.controller.js";
 import * as order from "../controllers/order.controller.js";
+import * as purchase from "../controllers/purchase.controller.js";
 import * as product from "../controllers/product.controller.js";
 import { makeCrud } from "../controllers/crud.factory.js";
 import * as reportService from "../services/report.service.js";
@@ -109,6 +110,13 @@ r.post("/orders", verifyToken, requirePerm("orders_edit"), order.create);
 r.patch("/orders/:id/status", verifyToken, requirePerm("orders_edit"), order.changeStatus);
 r.post("/orders/:id/payments", verifyToken, requirePerm("orders_edit"), order.addPayment);
 r.get("/orders/:id/invoice", verifyToken, requirePerm("orders_view"), order.invoice);
+
+// -------- Mua hàng: đơn mua đa dòng sản phẩm --------
+r.get("/purchases", verifyToken, requirePerm("purchases_view"), purchase.list);
+r.get("/purchases/:id", verifyToken, requirePerm("purchases_view"), purchase.getOne);
+r.post("/purchases", verifyToken, requirePerm("purchases_edit"), purchase.create);
+r.patch("/purchases/:id/status", verifyToken, requirePerm("purchases_edit"), purchase.changeStatus);
+r.post("/purchases/:id/payments", verifyToken, requirePerm("purchases_edit"), purchase.addPayment);
 
 // -------- Lương nhân viên & BHXH --------
 const employees = makeCrud("employees", ["name", "phone", "position", "base_salary", "allowance", "insurance_base", "active"], "name");

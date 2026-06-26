@@ -8,6 +8,7 @@ import PartnersPage from "./pages/PartnersPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
 import InventoryPage from "./pages/InventoryPage.jsx";
 import OrdersPage from "./pages/OrdersPage.jsx";
+import PurchasesPage from "./pages/PurchasesPage.jsx";
 import PayrollPage from "./pages/PayrollPage.jsx";
 import BankPage from "./pages/BankPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
@@ -25,6 +26,7 @@ const GROUPS = [
   ]},
   { label: "Mua bán & Kho", items: [
     { id: "orders", label: "Bán hàng", perm: "orders_view", icon: "🛒", el: <OrdersPage /> },
+    { id: "purchases", label: "Mua hàng", perm: "purchases_view", icon: "🧾", el: <PurchasesPage /> },
     { id: "inventory", label: "Nhập-Xuất-Tồn", perm: "inventory_view", icon: "📦", el: <InventoryPage /> },
     { id: "partners", label: "Công nợ", perm: "partners_view", icon: "🤝", el: <PartnersPage /> },
   ]},

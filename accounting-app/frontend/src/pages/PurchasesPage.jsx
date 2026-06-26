@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../store/auth.store.jsx";
-import * as ordersService from "../services/orders.service.js";
+import * as purchasesService from "../services/purchases.service.js";
 import * as inventoryService from "../services/inventory.service.js";
 import * as partnersService from "../services/partners.service.js";
 import { fmt } from "../utils/format.js";
@@ -15,20 +15,20 @@ const STATUS_COLOR = {
   "Đã hủy": "bg-red-100 text-red-700",
 };
 
-export default function OrdersPage() {
+export default function PurchasesPage() {
   const { can } = useAuth();
-  const [orders, setOrders] = useState([]);
+  const [purchases, setPurchases] = useState([]);
   const [products, setProducts] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [stock, setStock] = useState([]);
-  const [customers, setCustomers] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [paying, setPaying] = useState(null);
   const [statusFilter, setStatusFilter] = useState("");
 
   async function reload() {
-    try { setOrders(await ordersService.listOrders()); }
+    try { setPurchases(await purchasesService.listPurchases()); }
     catch (e) { setError(e.message); }
   }
   useEffect(() => {
@@ -36,21 +36,21 @@ export default function OrdersPage() {
     inventoryService.listProducts().then(setProducts).catch(() => {});
     inventoryService.listWarehouses().then(setWarehouses).catch(() => {});
     inventoryService.listStock().then(setStock).catch(() => {});
-    partnersService.listPartners().then((ps) => setCustomers(ps.filter((p) => p.type === "customer"))).catch(() => {});
+    partnersService.listPartners().then((ps) => setSuppliers(ps.filter((p) => p.type === "supplier"))).catch(() => {});
   }, []);
 
-  const filtered = orders.filter((o) => !statusFilter || o.status === statusFilter);
+  const filtered = purchases.filter((o) => !statusFilter || o.status === statusFilter);
 
   async function setStatus(id, status) {
-    if (status === "Đã hủy" && !confirm("Hủy đơn này? Hàng sẽ được hoàn lại kho.")) return;
-    try { await ordersService.changeOrderStatus(id, status); reload(); }
+    if (status === "Đã hủy" && !confirm("Hủy đơn mua này? Hàng sẽ bị trừ lại khỏi kho (cần đủ tồn để hủy).")) return;
+    try { await purchasesService.changePurchaseStatus(id, status); reload(); }
     catch (e) { setError(e.message); }
   }
 
   return (
     <div className="space-y-3">
       <Toolbar
-        title="Bán hàng — Đơn hàng"
+        title="Mua hàng — Đơn mua"
         filters={
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
             className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm">
@@ -60,8 +60,8 @@ export default function OrdersPage() {
             <option>Đã hủy</option>
           </select>
         }
-        actions={can("orders_edit") && (
-          <ToolbarButton variant="primary" onClick={() => setCreating(true)}>+ Tạo đơn hàng</ToolbarButton>
+        actions={can("purchases_edit") && (
+          <ToolbarButton variant="primary" onClick={() => setCreating(true)}>+ Tạo đơn mua</ToolbarButton>
         )}
       />
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
@@ -69,8 +69,8 @@ export default function OrdersPage() {
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="text-left text-slate-400 text-xs">
-            <th className="py-2 px-3">Mã đơn</th><th className="py-2 px-3">Khách hàng</th><th className="py-2 px-3 text-right">Tổng tiền</th>
-            <th className="py-2 px-3 text-right">Đã thu</th><th className="py-2 px-3 text-right">Còn lại</th>
+            <th className="py-2 px-3">Mã đơn</th><th className="py-2 px-3">Nhà cung cấp</th><th className="py-2 px-3 text-right">Tổng tiền</th>
+            <th className="py-2 px-3 text-right">Đã trả</th><th className="py-2 px-3 text-right">Còn lại</th>
             <th className="py-2 px-3">Trạng thái</th><th className="py-2 px-3">Ngày</th><th className="py-2 px-3"></th>
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
@@ -79,7 +79,7 @@ export default function OrdersPage() {
               return (
                 <tr key={o.id}>
                   <td className="py-2 px-3 font-medium">{o.code}</td>
-                  <td className="py-2 px-3">{o.customer_name || "Khách lẻ"}</td>
+                  <td className="py-2 px-3">{o.supplier_name || "—"}</td>
                   <td className="py-2 px-3 text-right font-medium">{fmt(o.total)}</td>
                   <td className="py-2 px-3 text-right text-emerald-600">{fmt(o.paid)}</td>
                   <td className="py-2 px-3 text-right text-red-500">{fmt(remaining)}</td>
@@ -89,11 +89,10 @@ export default function OrdersPage() {
                   <td className="py-2 px-3 whitespace-nowrap text-slate-400">{new Date(o.created_at).toLocaleDateString("vi-VN")}</td>
                   <td className="py-2 px-3">
                     <div className="flex gap-2 justify-end text-xs">
-                      <button onClick={() => ordersService.openInvoice(o.id)} className="text-indigo-600 hover:underline">In</button>
-                      {can("orders_edit") && o.status === "Mới" && remaining > 0 && (
-                        <button onClick={() => setPaying(o)} className="text-emerald-600 hover:underline">Thu tiền</button>
+                      {can("purchases_edit") && o.status === "Mới" && remaining > 0 && (
+                        <button onClick={() => setPaying(o)} className="text-emerald-600 hover:underline">Trả tiền</button>
                       )}
-                      {can("orders_edit") && o.status === "Mới" && (
+                      {can("purchases_edit") && o.status === "Mới" && (
                         <>
                           <button onClick={() => setStatus(o.id, "Hoàn thành")} className="text-slate-500 hover:underline">Hoàn thành</button>
                           <button onClick={() => setStatus(o.id, "Đã hủy")} className="text-red-500 hover:underline">Hủy</button>
@@ -106,26 +105,22 @@ export default function OrdersPage() {
             })}
           </tbody>
         </table>
-        {filtered.length === 0 && <p className="text-slate-400 text-sm p-4">Chưa có đơn hàng nào.</p>}
+        {filtered.length === 0 && <p className="text-slate-400 text-sm p-4">Chưa có đơn mua nào.</p>}
       </div>
 
       {creating && (
-        <CreateOrderModal products={products} warehouses={warehouses} customers={customers} stock={stock}
+        <CreatePurchaseModal products={products} warehouses={warehouses} suppliers={suppliers} stock={stock}
           onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }} />
       )}
       {paying && (
-        <PayOrderModal order={paying} onClose={() => setPaying(null)} onSaved={() => { setPaying(null); reload(); }} />
+        <PayPurchaseModal purchase={paying} onClose={() => setPaying(null)} onSaved={() => { setPaying(null); reload(); }} />
       )}
     </div>
   );
 }
 
-function CreateOrderModal({ products, warehouses, customers, stock, onClose, onSaved }) {
-  const [customerId, setCustomerId] = useState("");
-  const [addingNewCustomer, setAddingNewCustomer] = useState(false);
-  const [newCustomerName, setNewCustomerName] = useState("");
-  const [newCustomerPhone, setNewCustomerPhone] = useState("");
-  const [newCustomerAddress, setNewCustomerAddress] = useState("");
+function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, onSaved }) {
+  const [supplierId, setSupplierId] = useState("");
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id || "");
   const [items, setItems] = useState([{ productId: "", variantId: "", qty: 1, price: 0 }]);
   const [discount, setDiscount] = useState("");
@@ -145,12 +140,12 @@ function CreateOrderModal({ products, warehouses, customers, stock, onClose, onS
       if (field === "productId") {
         const p = products.find((pp) => String(pp.id) === String(value));
         next.variantId = "";
-        if (p && !p.has_variants) next.price = p.price || 0;
+        if (p && !p.has_variants) next.price = p.cost || 0;
       }
       if (field === "variantId") {
         const p = products.find((pp) => String(pp.id) === String(it.productId));
         const v = p?.variants?.find((vv) => String(vv.id) === String(value));
-        if (v) next.price = v.price || 0;
+        if (v) next.price = v.cost || 0;
       }
       return next;
     }));
@@ -161,18 +156,15 @@ function CreateOrderModal({ products, warehouses, customers, stock, onClose, onS
   async function submit(e) {
     e.preventDefault();
     setError("");
-    if (!warehouseId) return setError("Thiếu kho xuất hàng");
+    if (!warehouseId) return setError("Thiếu kho nhập hàng");
     if (items.some((it) => !it.productId || !it.qty)) return setError("Vui lòng chọn sản phẩm và số lượng cho mọi dòng");
     if (items.some((it) => products.find((p) => String(p.id) === String(it.productId))?.has_variants && !it.variantId)) {
       return setError("Vui lòng chọn biến thể cho các sản phẩm có biến thể");
     }
-    if (addingNewCustomer && !newCustomerName.trim()) return setError("Thiếu tên khách lẻ mới");
     setSaving(true);
     try {
-      await ordersService.createOrder({
-        customerId: addingNewCustomer ? null : (customerId || null),
-        newCustomer: addingNewCustomer ? { name: newCustomerName, phone: newCustomerPhone || null, address: newCustomerAddress || null } : null,
-        warehouseId,
+      await purchasesService.createPurchase({
+        supplierId: supplierId || null, warehouseId,
         items: items.map((it) => ({ productId: it.productId, variantId: it.variantId || null, qty: Number(it.qty), price: Number(it.price) })),
         discount: Number(discount) || 0, paidNow: Number(paidNow) || 0, method, note: note || null,
       });
@@ -181,61 +173,36 @@ function CreateOrderModal({ products, warehouses, customers, stock, onClose, onS
   }
 
   return (
-    <Modal title="Tạo đơn hàng" onClose={onClose}>
+    <Modal title="Tạo đơn mua hàng" onClose={onClose}>
       <form onSubmit={submit} className="space-y-3">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="text-xs text-slate-500">Khách hàng</label>
-              <button type="button" onClick={() => { setAddingNewCustomer((v) => !v); setCustomerId(""); }}
-                className="text-xs text-indigo-600 font-medium">
-                {addingNewCustomer ? "← Chọn khách có sẵn" : "+ Khách lẻ mới"}
-              </button>
-            </div>
-            {addingNewCustomer ? (
-              <input value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Tên khách lẻ"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-            ) : (
-              <SearchSelect options={customers} value={customerId} onChange={setCustomerId}
-                getLabel={(c) => c.name} getValue={(c) => c.id} getSearchText={(c) => `${c.name} ${c.phone || ""} ${c.code}`}
-                placeholder="— Khách lẻ (gõ tên/SĐT để tìm) —" />
-            )}
-          </div>
-          <div><label className="text-xs text-slate-500">Kho xuất</label>
+          <div><label className="text-xs text-slate-500">Nhà cung cấp</label>
+            <SearchSelect options={suppliers} value={supplierId} onChange={setSupplierId}
+              getLabel={(s) => s.name} getValue={(s) => s.id} getSearchText={(s) => `${s.name} ${s.phone || ""} ${s.code}`}
+              placeholder="— Chọn nhà cung cấp —" /></div>
+          <div><label className="text-xs text-slate-500">Kho nhập</label>
             <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
               {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select></div>
         </div>
-        {addingNewCustomer && (
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-xs text-slate-500">Số điện thoại</label>
-              <input value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
-            <div><label className="text-xs text-slate-500">Địa chỉ</label>
-              <input value={newCustomerAddress} onChange={(e) => setNewCustomerAddress(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
-          </div>
-        )}
 
         <div className="space-y-2">
           <label className="text-xs text-slate-500">Sản phẩm</label>
-          {items.map((it, idx) => {
-            return (
-              <div key={idx} className="flex gap-2 items-center flex-wrap">
-                <ProductLinePicker products={products} stock={stock} warehouseId={warehouseId}
-                  productId={it.productId} variantId={it.variantId}
-                  onChangeProduct={(v) => updateItem(idx, "productId", v)} onChangeVariant={(v) => updateItem(idx, "variantId", v)} />
-                <input type="number" min="0" value={it.qty} onChange={(e) => updateItem(idx, "qty", e.target.value)}
-                  placeholder="SL" className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
-                <input type="number" min="0" value={it.price} onChange={(e) => updateItem(idx, "price", e.target.value)}
-                  placeholder="Giá" className="w-28 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
-                {items.length > 1 && (
-                  <button type="button" onClick={() => removeLine(idx)} className="text-red-500 text-xs">Xoá</button>
-                )}
-              </div>
-            );
-          })}
+          {items.map((it, idx) => (
+            <div key={idx} className="flex gap-2 items-center flex-wrap">
+              <ProductLinePicker products={products} stock={stock} warehouseId={warehouseId}
+                productId={it.productId} variantId={it.variantId}
+                onChangeProduct={(v) => updateItem(idx, "productId", v)} onChangeVariant={(v) => updateItem(idx, "variantId", v)} />
+              <input type="number" min="0" value={it.qty} onChange={(e) => updateItem(idx, "qty", e.target.value)}
+                placeholder="SL" className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
+              <input type="number" min="0" value={it.price} onChange={(e) => updateItem(idx, "price", e.target.value)}
+                placeholder="Giá nhập" className="w-28 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
+              {items.length > 1 && (
+                <button type="button" onClick={() => removeLine(idx)} className="text-red-500 text-xs">Xoá</button>
+              )}
+            </div>
+          ))}
           <button type="button" onClick={addLine} className="text-indigo-600 text-xs font-medium">+ Thêm dòng</button>
         </div>
 
@@ -267,8 +234,8 @@ function CreateOrderModal({ products, warehouses, customers, stock, onClose, onS
   );
 }
 
-function PayOrderModal({ order, onClose, onSaved }) {
-  const remaining = Number(order.total) - Number(order.paid);
+function PayPurchaseModal({ purchase, onClose, onSaved }) {
+  const remaining = Number(purchase.total) - Number(purchase.paid);
   const [amount, setAmount] = useState(remaining);
   const [method, setMethod] = useState("Tiền mặt");
   const [error, setError] = useState("");
@@ -279,17 +246,17 @@ function PayOrderModal({ order, onClose, onSaved }) {
     if (!amount || Number(amount) <= 0) return setError("Số tiền không hợp lệ");
     setSaving(true);
     try {
-      await ordersService.addOrderPayment(order.id, { amount: Number(amount), method });
+      await purchasesService.addPurchasePayment(purchase.id, { amount: Number(amount), method });
       onSaved();
     } catch (e2) { setError(e2.message); } finally { setSaving(false); }
   }
 
   return (
-    <Modal title={`Thu tiền — ${order.code}`} onClose={onClose}>
+    <Modal title={`Trả tiền — ${purchase.code}`} onClose={onClose}>
       <form onSubmit={submit} className="space-y-3">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div className="text-sm text-slate-500">Còn lại: <span className="font-semibold text-slate-800">{fmt(remaining)}</span></div>
-        <div><label className="text-xs text-slate-500">Số tiền thu</label>
+        <div><label className="text-xs text-slate-500">Số tiền trả</label>
           <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
         <div><label className="text-xs text-slate-500">Phương thức</label>
           <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">

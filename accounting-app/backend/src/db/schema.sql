@@ -223,6 +223,34 @@ ALTER TABLE order_items ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES p
 
 ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS order_id INTEGER REFERENCES orders(id);
 
+-- ============== Mua hàng: Đơn mua đa dòng sản phẩm (thay cho "Nhập hàng" đơn giản) ==============
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  supplier_id INTEGER REFERENCES partners(id),
+  supplier_name TEXT,
+  warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+  status TEXT NOT NULL DEFAULT 'Mới' CHECK (status IN ('Mới', 'Hoàn thành', 'Đã hủy')),
+  subtotal NUMERIC(18,2) NOT NULL DEFAULT 0,
+  discount NUMERIC(18,2) NOT NULL DEFAULT 0,
+  total NUMERIC(18,2) NOT NULL DEFAULT 0,
+  paid NUMERIC(18,2) NOT NULL DEFAULT 0,
+  note TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+  id SERIAL PRIMARY KEY,
+  purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  variant_id INTEGER REFERENCES product_variants(id),
+  qty NUMERIC(18,3) NOT NULL CHECK (qty > 0),
+  price NUMERIC(18,2) NOT NULL -- giá nhập (giá vốn) tại thời điểm mua
+);
+
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS purchase_order_id INTEGER REFERENCES purchase_orders(id);
+
 CREATE SEQUENCE IF NOT EXISTS tx_seq START 1;
 CREATE SEQUENCE IF NOT EXISTS debt_seq START 1;
 CREATE SEQUENCE IF NOT EXISTS partner_seq START 1;
@@ -230,6 +258,7 @@ CREATE SEQUENCE IF NOT EXISTS stock_seq START 1;
 CREATE SEQUENCE IF NOT EXISTS employee_seq START 1;
 CREATE SEQUENCE IF NOT EXISTS payslip_seq START 1;
 CREATE SEQUENCE IF NOT EXISTS order_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS purchase_seq START 1;
 
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_partner ON transactions(partner_id);
@@ -239,3 +268,5 @@ CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(produc
 CREATE INDEX IF NOT EXISTS idx_payslips_period ON payslips(year, month);
 CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier ON purchase_orders(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_order_items_po ON purchase_order_items(purchase_order_id);

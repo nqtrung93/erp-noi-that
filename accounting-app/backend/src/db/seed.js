@@ -13,6 +13,7 @@ const ROLE_PERMS = {
     "categories_view", "categories_edit",
     "inventory_view", "inventory_edit",
     "orders_view", "orders_edit",
+    "purchases_view", "purchases_edit",
     "payroll_view", "payroll_edit",
     "bank_view", "bank_edit",
     "reports",
@@ -26,11 +27,12 @@ const ROLE_PERMS = {
     "categories_view",
     "inventory_view", "inventory_edit",
     "orders_view", "orders_edit",
+    "purchases_view", "purchases_edit",
     "payroll_view", "payroll_edit",
     "bank_view", "bank_edit",
     "reports",
   ],
-  "Xem báo cáo": ["dashboard", "cashbook_view", "partners_view", "inventory_view", "orders_view", "payroll_view", "bank_view", "reports"],
+  "Xem báo cáo": ["dashboard", "cashbook_view", "partners_view", "inventory_view", "orders_view", "purchases_view", "payroll_view", "bank_view", "reports"],
 };
 
 const EXPENSE_CATEGORIES = ["Lương", "Mặt bằng", "Nguyên vật liệu", "Điện nước", "Chi phí khác", "Nhập hàng", "Nộp BHXH/BHYT/BHTN", "Trả lương"];

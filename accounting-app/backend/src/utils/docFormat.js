@@ -4,6 +4,7 @@ import { query } from "../config/db.js";
 // Phần số vẫn lấy từ sequence Postgres (đảm bảo không trùng/atomic) — chỉ đổi cách HIỂN THỊ (prefix/pad).
 export const DEFAULT_DOC_FORMATS = {
   orders: { label: "Đơn bán hàng", prefix: "ORD", pad: 6, seq: "order_seq" },
+  purchase: { label: "Đơn mua hàng", prefix: "PO", pad: 6, seq: "purchase_seq" },
   inbound: { label: "Phiếu nhập hàng", prefix: "PN", pad: 6, seq: "stock_seq" },
   outbound: { label: "Phiếu xuất hàng", prefix: "PX", pad: 6, seq: "stock_seq" },
   adjust: { label: "Phiếu điều chỉnh tồn", prefix: "PDC", pad: 6, seq: "stock_seq" },

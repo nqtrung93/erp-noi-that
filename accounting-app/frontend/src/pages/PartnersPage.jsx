@@ -13,6 +13,7 @@ export default function PartnersPage() {
   const [partners, setPartners] = useState([]);
   const [error, setError] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [debtTarget, setDebtTarget] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -24,7 +25,12 @@ export default function PartnersPage() {
   }
   useEffect(() => { reload(); }, []);
 
-  const filtered = partners.filter((p) => !typeFilter || p.type === typeFilter);
+  const filtered = partners
+    .filter((p) => !typeFilter || p.type === typeFilter)
+    .filter((p) => !search ||
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.phone || "").includes(search) ||
+      p.code.toLowerCase().includes(search.toLowerCase()));
   const totalDebt = filtered.reduce((s, p) => s + Number(p.debt), 0);
 
   async function remove(id) {
@@ -73,13 +79,17 @@ export default function PartnersPage() {
       <Toolbar
         title="Công nợ khách hàng / nhà cung cấp"
         filters={
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
-            className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm">
-            <option value="">— Tất cả —</option>
-            <option value="customer">Khách hàng</option>
-            <option value="supplier">Nhà cung cấp</option>
-            <option value="other">Khác</option>
-          </select>
+          <>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên, SĐT hoặc mã…"
+              className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm min-w-[220px]" />
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
+              className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm">
+              <option value="">— Tất cả —</option>
+              <option value="customer">Khách hàng</option>
+              <option value="supplier">Nhà cung cấp</option>
+              <option value="other">Khác</option>
+            </select>
+          </>
         }
         actions={can("partners_edit") && (
           <>

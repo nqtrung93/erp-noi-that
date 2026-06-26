@@ -1,6 +1,7 @@
 import { query, withTransaction } from "../config/db.js";
 import { asyncHandler, badRequest, notFound } from "../utils/http.js";
 import { nextDocNo } from "../utils/docFormat.js";
+import { nextCode } from "../utils/sequence.js";
 import { upsertStock } from "./stock.controller.js";
 import { renderInvoiceHtml } from "../utils/printTemplate.js";
 
@@ -29,9 +30,10 @@ export const getOne = asyncHandler(async (req, res) => {
   res.json({ ...order, items });
 });
 
-// POST /api/orders { customerId, warehouseId, items:[{productId,variantId,qty,price}], discount, paidNow, method, note }
+// POST /api/orders { customerId, newCustomer:{name,phone,address}, warehouseId, items:[{productId,variantId,qty,price}], discount, paidNow, method, note }
+// newCustomer: tạo nhanh khách lẻ ngay lúc lập đơn (khi customerId không có) — chỉ cần "name" là đủ.
 export const create = asyncHandler(async (req, res) => {
-  const { customerId, warehouseId, items, discount, paidNow, method, note } = req.body || {};
+  const { customerId, newCustomer, warehouseId, items, discount, paidNow, method, note } = req.body || {};
   if (!warehouseId) throw badRequest("Thiếu kho xuất hàng");
   if (!Array.isArray(items) || !items.length) throw badRequest("Đơn hàng cần ít nhất 1 sản phẩm");
 
@@ -39,9 +41,17 @@ export const create = asyncHandler(async (req, res) => {
     const code = await nextDocNo(c, "orders");
 
     let customer = null;
+    let resolvedCustomerId = customerId || null;
     if (customerId) {
       customer = (await c.query(`SELECT * FROM partners WHERE id = $1 FOR UPDATE`, [customerId])).rows[0];
       if (!customer) throw notFound("Khách hàng không tồn tại");
+    } else if (newCustomer && String(newCustomer.name || "").trim()) {
+      const partnerCode = await nextCode(c, "KH", "partner_seq");
+      customer = (await c.query(
+        `INSERT INTO partners(code, name, type, phone, address) VALUES($1,$2,'customer',$3,$4) RETURNING *`,
+        [partnerCode, newCustomer.name.trim(), newCustomer.phone || null, newCustomer.address || null]
+      )).rows[0];
+      resolvedCustomerId = customer.id;
     }
 
     let subtotal = 0;
@@ -68,7 +78,7 @@ export const create = asyncHandler(async (req, res) => {
     const order = (await c.query(
       `INSERT INTO orders(code, customer_id, customer_name, warehouse_id, subtotal, discount, total, paid, note, created_by)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [code, customerId || null, customer?.name || null, warehouseId, subtotal, disc, total, paid, note || null, req.user.sub]
+      [code, resolvedCustomerId, customer?.name || null, warehouseId, subtotal, disc, total, paid, note || null, req.user.sub]
     )).rows[0];
 
     for (const line of lineRows) {
@@ -81,7 +91,7 @@ export const create = asyncHandler(async (req, res) => {
       await c.query(
         `INSERT INTO stock_movements(code, product_id, variant_id, warehouse_id, qty_change, type, partner_id, order_id, note, created_by)
          VALUES($1,$2,$3,$4,$5,'outbound',$6,$7,$8,$9)`,
-        [moveCode, line.productId, line.variantId, warehouseId, -line.qty, customerId || null, order.id, `Đơn hàng ${code}`, req.user.sub]
+        [moveCode, line.productId, line.variantId, warehouseId, -line.qty, resolvedCustomerId, order.id, `Đơn hàng ${code}`, req.user.sub]
       );
     }
 
@@ -91,7 +101,7 @@ export const create = asyncHandler(async (req, res) => {
       transaction = (await c.query(
         `INSERT INTO transactions(code, type, category_name, amount, method, partner_id, partner_name, note, created_by)
          VALUES($1,'Thu','Bán hàng',$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [txCode, paid, method || null, customerId || null, customer?.name || null, `Thanh toán đơn ${code}`, req.user.sub]
+        [txCode, paid, method || null, resolvedCustomerId, customer?.name || null, `Thanh toán đơn ${code}`, req.user.sub]
       )).rows[0];
     }
 
