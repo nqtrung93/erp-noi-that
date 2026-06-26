@@ -218,7 +218,8 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, 
           <div><label className="text-sm text-slate-500">Giảm giá</label>
             <input type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
           <div><label className="text-sm text-slate-500">VAT (%)</label>
-            <input type="number" min="0" max="100" step="0.5" value={vatRate} onChange={(e) => setVatRate(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+            <input type="number" value={vatRate} disabled title="Tỷ lệ VAT cố định — đổi ở mục Cài đặt"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base bg-slate-50 text-slate-500 cursor-not-allowed" /></div>
           <div><label className="text-sm text-slate-500">Phí ship</label>
             <input type="number" min="0" value={shippingFee} onChange={(e) => setShippingFee(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
           <div><label className="text-sm text-slate-500">Phương thức</label>

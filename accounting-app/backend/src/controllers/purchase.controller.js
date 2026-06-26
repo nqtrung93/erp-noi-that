@@ -28,14 +28,17 @@ export const getOne = asyncHandler(async (req, res) => {
   res.json({ ...po, items });
 });
 
-// POST /api/purchases { supplierId, warehouseId, items:[{productId,variantId,qty,price}], discount, vatRate, shippingFee, paidNow, method, note }
+// POST /api/purchases { supplierId, warehouseId, items:[{productId,variantId,qty,price}], discount, shippingFee, paidNow, method, note }
+// VAT KHÔNG nhận từ client — luôn lấy tỷ lệ cố định ở Cài đặt để tránh người dùng tự sửa qua API.
 export const create = asyncHandler(async (req, res) => {
-  const { supplierId, warehouseId, items, discount, vatRate, shippingFee, paidNow, method, note } = req.body || {};
+  const { supplierId, warehouseId, items, discount, shippingFee, paidNow, method, note } = req.body || {};
   if (!warehouseId) throw badRequest("Thiếu kho nhập hàng");
   if (!Array.isArray(items) || !items.length) throw badRequest("Đơn mua cần ít nhất 1 sản phẩm");
 
   const result = await withTransaction(async (c) => {
     const code = await nextDocNo(c, "purchase");
+    const vatSetting = (await c.query(`SELECT value FROM app_settings WHERE key = 'vat_rate'`)).rows[0];
+    const vatRate = vatSetting?.value ? Number(vatSetting.value) : 0;
 
     let supplier = null;
     if (supplierId) {
@@ -60,7 +63,7 @@ export const create = asyncHandler(async (req, res) => {
     }
 
     const disc = Number(discount) || 0;
-    const vatPct = Number(vatRate) || 0;
+    const vatPct = vatRate;
     const ship = Number(shippingFee) || 0;
     const afterDiscount = Math.max(subtotal - disc, 0);
     const vatAmount = Math.round(afterDiscount * vatPct) / 100;

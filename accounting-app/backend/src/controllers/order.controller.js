@@ -30,15 +30,18 @@ export const getOne = asyncHandler(async (req, res) => {
   res.json({ ...order, items });
 });
 
-// POST /api/orders { customerId, newCustomer:{name,phone,address}, warehouseId, items:[{productId,variantId,qty,price}], discount, vatRate, shippingFee, paidNow, method, note }
+// POST /api/orders { customerId, newCustomer:{name,phone,address}, warehouseId, items:[{productId,variantId,qty,price}], discount, shippingFee, paidNow, method, note }
 // newCustomer: tạo nhanh khách lẻ ngay lúc lập đơn (khi customerId không có) — chỉ cần "name" là đủ.
+// VAT KHÔNG nhận từ client — luôn lấy tỷ lệ cố định ở Cài đặt để tránh người dùng tự sửa qua API.
 export const create = asyncHandler(async (req, res) => {
-  const { customerId, newCustomer, warehouseId, items, discount, vatRate, shippingFee, paidNow, method, note } = req.body || {};
+  const { customerId, newCustomer, warehouseId, items, discount, shippingFee, paidNow, method, note } = req.body || {};
   if (!warehouseId) throw badRequest("Thiếu kho xuất hàng");
   if (!Array.isArray(items) || !items.length) throw badRequest("Đơn hàng cần ít nhất 1 sản phẩm");
 
   const result = await withTransaction(async (c) => {
     const code = await nextDocNo(c, "orders");
+    const vatSetting = (await c.query(`SELECT value FROM app_settings WHERE key = 'vat_rate'`)).rows[0];
+    const vatRate = vatSetting?.value ? Number(vatSetting.value) : 0;
 
     let customer = null;
     let resolvedCustomerId = customerId || null;
@@ -72,7 +75,7 @@ export const create = asyncHandler(async (req, res) => {
     }
 
     const disc = Number(discount) || 0;
-    const vatPct = Number(vatRate) || 0;
+    const vatPct = vatRate;
     const ship = Number(shippingFee) || 0;
     const afterDiscount = Math.max(subtotal - disc, 0);
     const vatAmount = Math.round(afterDiscount * vatPct) / 100;
