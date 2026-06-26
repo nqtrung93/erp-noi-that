@@ -4,6 +4,7 @@ import * as partnersService from "../services/partners.service.js";
 import { fmt } from "../utils/format.js";
 import Modal from "../components/Modal.jsx";
 import Toolbar, { ToolbarButton } from "../components/Toolbar.jsx";
+import { readCsvFile } from "../utils/importCsv.js";
 
 const TYPE_LABEL = { customer: "Khách hàng", supplier: "Nhà cung cấp", other: "Khác" };
 
@@ -14,6 +15,8 @@ export default function PartnersPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [creating, setCreating] = useState(false);
   const [debtTarget, setDebtTarget] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
 
   async function reload() {
     try { setPartners(await partnersService.listPartners()); }
@@ -30,6 +33,41 @@ export default function PartnersPage() {
     catch (e) { setError(e.message); }
   }
 
+  // Nhập CSV công nợ đầu kỳ: cột Mã, Tên, Loại (KH/NCC), Công nợ. SET công nợ tuyệt đối,
+  // upsert theo Mã — chạy lại nhiều lần không bị trùng.
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true); setImportResult(null); setError("");
+    try {
+      const rows = await readCsvFile(file);
+      const payload = rows.map((r) => ({
+        code: r["Mã"], name: r["Tên"],
+        type: (r["Loại"] || "").trim().toUpperCase() === "NCC" ? "supplier" : "customer",
+        debt: r["Công nợ"],
+      }));
+      const result = await partnersService.importDebt(payload);
+      setImportResult(result);
+      reload();
+    } catch (e2) {
+      setError(e2.message);
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  }
+
+  function downloadSampleCsv() {
+    const csv = "Mã,Tên,Loại,Công nợ\n"
+      + "KH-DAOLC,Chị Đào - Nội thất Anh Đào,KH,176697130\n"
+      + "NCC-HOAPHAT,Công ty cổ phần nội thất Hòa Phát,NCC,388470042\n";
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "mau_nhap_cong_no.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-3">
       <Toolbar
@@ -44,10 +82,23 @@ export default function PartnersPage() {
           </select>
         }
         actions={can("partners_edit") && (
-          <ToolbarButton variant="primary" onClick={() => setCreating(true)}>+ Thêm đối tượng</ToolbarButton>
+          <>
+            <ToolbarButton variant="primary" onClick={() => setCreating(true)}>+ Thêm đối tượng</ToolbarButton>
+            <ToolbarButton onClick={downloadSampleCsv}>Tải mẫu CSV</ToolbarButton>
+            <label className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 cursor-pointer hover:bg-slate-50">
+              {importing ? "Đang nhập…" : "Nhập CSV công nợ"}
+              <input type="file" accept=".csv" onChange={handleImportFile} disabled={importing} className="hidden" />
+            </label>
+          </>
         )}
       />
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
+      {importResult && (
+        <div className={`text-sm rounded-lg px-3 py-2 space-y-1 ${importResult.failed.length ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
+          <div>Đã tạo {importResult.created} mới, cập nhật {importResult.updated} đối tượng. {importResult.failed.length > 0 ? `${importResult.failed.length} lỗi:` : ""}</div>
+          {importResult.failed.map((f, i) => <div key={i} className="text-xs">{f}</div>)}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl px-4 py-2 shadow-sm border border-slate-100 text-sm inline-block">
         Tổng công nợ: <span className="font-bold text-slate-800">{fmt(totalDebt)}</span>

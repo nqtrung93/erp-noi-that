@@ -25,3 +25,4 @@ export const inbound = (data) => api.post("/stock/inbound", data);
 export const outbound = (data) => api.post("/stock/outbound", data);
 export const adjust = (data) => api.post("/stock/adjust", data);
 export const transfer = (data) => api.post("/stock/transfer", data);
+export const importOpeningStock = (rows) => api.post("/stock/import-opening", { rows });

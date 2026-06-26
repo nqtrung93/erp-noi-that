@@ -42,6 +42,79 @@ export const listMovements = asyncHandler(async (req, res) => {
   res.json(rows);
 });
 
+// POST /api/stock/import-opening { rows: [{ warehouse, sku, name, unit, qty, cost }] }
+// Nhập tồn kho đầu kỳ từ CSV: tự tạo kho (theo tên) + sản phẩm (theo SKU) nếu chưa có,
+// rồi SET số lượng tồn TUYỆT ĐỐI (không cộng dồn) — ghi 1 phiếu "adjust" cho mỗi dòng để có
+// audit trail (lệch giữa tồn cũ và tồn mới nhập).
+export const importOpeningStock = asyncHandler(async (req, res) => {
+  const rows = Array.isArray((req.body || {}).rows) ? req.body.rows : [];
+  if (!rows.length) throw badRequest("Không có dữ liệu để nhập");
+
+  const result = await withTransaction(async (c) => {
+    let created = 0, updated = 0;
+    const failed = [];
+    for (const row of rows) {
+      try {
+        const warehouseName = String(row.warehouse || "").trim();
+        const sku = String(row.sku || "").trim();
+        const name = String(row.name || "").trim();
+        const unit = String(row.unit || "cái").trim() || "cái";
+        const qty = Number(row.qty) || 0;
+        const cost = row.cost !== undefined && row.cost !== "" ? Number(row.cost) || 0 : null;
+        if (!warehouseName || !sku || !name) throw new Error("Thiếu kho, mã hàng hoặc tên hàng");
+
+        let warehouse = (await c.query(`SELECT * FROM warehouses WHERE name = $1`, [warehouseName])).rows[0];
+        if (!warehouse) {
+          let code, exists = true;
+          while (exists) {
+            const { rows: wcode } = await c.query(`SELECT nextval('warehouse_seq') AS n`);
+            code = `KHO${String(wcode[0].n).padStart(2, "0")}`;
+            exists = (await c.query(`SELECT 1 FROM warehouses WHERE code = $1`, [code])).rows.length > 0;
+          }
+          warehouse = (await c.query(`INSERT INTO warehouses(code, name) VALUES($1,$2) RETURNING *`, [code, warehouseName])).rows[0];
+        }
+
+        let product = (await c.query(`SELECT * FROM products WHERE sku = $1`, [sku])).rows[0];
+        if (!product) {
+          product = (await c.query(
+            `INSERT INTO products(sku, name, unit, cost, price) VALUES($1,$2,$3,$4,$4) RETURNING *`,
+            [sku, name, unit, cost ?? 0]
+          )).rows[0];
+        } else if (cost !== null) {
+          await c.query(`UPDATE products SET cost = $1 WHERE id = $2`, [cost, product.id]);
+        }
+
+        const existingStock = (await c.query(
+          `SELECT qty FROM warehouse_stock WHERE product_id = $1 AND COALESCE(variant_id,-1) = -1 AND warehouse_id = $2`,
+          [product.id, warehouse.id]
+        )).rows[0];
+        const oldQty = existingStock ? Number(existingStock.qty) : 0;
+
+        await c.query(
+          `INSERT INTO warehouse_stock(product_id, warehouse_id, qty) VALUES($1,$2,$3)
+           ON CONFLICT (product_id, COALESCE(variant_id, -1), warehouse_id) DO UPDATE SET qty = $3`,
+          [product.id, warehouse.id, qty]
+        );
+
+        if (qty !== oldQty) {
+          const moveCode = await nextDocNo(c, "adjust");
+          await c.query(
+            `INSERT INTO stock_movements(code, product_id, warehouse_id, qty_change, type, note, created_by)
+             VALUES($1,$2,$3,$4,'adjust',$5,$6)`,
+            [moveCode, product.id, warehouse.id, qty - oldQty, "Nhập tồn đầu kỳ từ CSV", req.user.sub]
+          );
+        }
+
+        if (existingStock) updated++; else created++;
+      } catch (e) {
+        failed.push(`${row.sku || "?"}: ${e.message}`);
+      }
+    }
+    return { created, updated, failed };
+  });
+  res.status(201).json(result);
+});
+
 export async function upsertStock(c, productId, variantId, warehouseId, delta) {
   const { rows } = await c.query(
     `INSERT INTO warehouse_stock(product_id, variant_id, warehouse_id, qty) VALUES($1,$2,$3,$4)

@@ -26,6 +26,8 @@ export default function InventoryPage() {
   const [modal, setModal] = useState(null); // 'inbound' | 'outbound' | 'adjust' | 'transfer' | 'product'
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [importingStock, setImportingStock] = useState(false);
+  const [importStockResult, setImportStockResult] = useState(null);
 
   async function reload() {
     try {
@@ -104,6 +106,41 @@ export default function InventoryPage() {
     URL.revokeObjectURL(url);
   }
 
+  // Nhập tồn kho đầu kỳ: cột Kho, Mã hàng, Tên hàng, ĐVT, Số lượng, Giá vốn.
+  // Tự tạo kho/sản phẩm nếu chưa có, SET số lượng tồn tuyệt đối (không cộng dồn) — chạy lại
+  // không bị nhân đôi tồn kho, ghi audit trail bằng phiếu điều chỉnh.
+  async function handleImportStockFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportingStock(true); setImportStockResult(null); setError("");
+    try {
+      const rows = await readCsvFile(file);
+      const payload = rows.map((r) => ({
+        warehouse: r["Kho"], sku: r["Mã hàng"], name: r["Tên hàng"],
+        unit: r["ĐVT"], qty: r["Số lượng"], cost: r["Giá vốn"],
+      }));
+      const result = await inventoryService.importOpeningStock(payload);
+      setImportStockResult(result);
+      reload();
+    } catch (e2) {
+      setError(e2.message);
+    } finally {
+      setImportingStock(false);
+      e.target.value = "";
+    }
+  }
+
+  function downloadSampleStockCsv() {
+    const csv = "Kho,Mã hàng,Tên hàng,ĐVT,Số lượng,Giá vốn\n"
+      + "Kho chính,SP-001,Bàn ghế văn phòng,bộ,10,500000\n"
+      + "Kho chính,SP-002,Ghế xoay,cái,25,300000\n";
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "mau_nhap_ton_kho_dau_ky.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-3">
       <Toolbar
@@ -117,8 +154,13 @@ export default function InventoryPage() {
             <ToolbarButton onClick={() => setModal("transfer")}>Luân chuyển</ToolbarButton>
             <ToolbarButton onClick={downloadSampleCsv}>Tải mẫu CSV</ToolbarButton>
             <label className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 cursor-pointer hover:bg-slate-50">
-              {importing ? "Đang nhập…" : "Nhập CSV"}
+              {importing ? "Đang nhập…" : "Nhập CSV sản phẩm"}
               <input type="file" accept=".csv" onChange={handleImportFile} disabled={importing} className="hidden" />
+            </label>
+            <ToolbarButton onClick={downloadSampleStockCsv}>Tải mẫu CSV tồn kho</ToolbarButton>
+            <label className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 cursor-pointer hover:bg-slate-50">
+              {importingStock ? "Đang nhập…" : "Nhập CSV tồn kho đầu kỳ"}
+              <input type="file" accept=".csv" onChange={handleImportStockFile} disabled={importingStock} className="hidden" />
             </label>
           </>
         )}
@@ -128,6 +170,12 @@ export default function InventoryPage() {
         <div className={`text-sm rounded-lg px-3 py-2 space-y-1 ${importResult.failed.length ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
           <div>Đã tạo {importResult.ok} sản phẩm. {importResult.failed.length > 0 ? `${importResult.failed.length} lỗi:` : ""}</div>
           {importResult.failed.map((f, i) => <div key={i} className="text-xs">{f}</div>)}
+        </div>
+      )}
+      {importStockResult && (
+        <div className={`text-sm rounded-lg px-3 py-2 space-y-1 ${importStockResult.failed.length ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
+          <div>Tồn kho: tạo mới {importStockResult.created}, cập nhật {importStockResult.updated}. {importStockResult.failed.length > 0 ? `${importStockResult.failed.length} lỗi:` : ""}</div>
+          {importStockResult.failed.map((f, i) => <div key={i} className="text-xs">{f}</div>)}
         </div>
       )}
 

@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS warehouses (
   address TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE SEQUENCE IF NOT EXISTS warehouse_seq START 10; -- bắt đầu từ 10 để tránh trùng mã KHO01 seed sẵn
 
 CREATE TABLE IF NOT EXISTS products (
   id SERIAL PRIMARY KEY,

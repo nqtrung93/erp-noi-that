@@ -71,3 +71,38 @@ export const debtHistory = asyncHandler(async (req, res) => {
   );
   res.json(rows);
 });
+
+// POST /api/partners/import  { rows: [{ code, name, type, debt }] }
+// Nhập số dư công nợ đầu kỳ từ CSV (khách hàng/NCC). Upsert theo "code": nếu đã có
+// thì cập nhật tên+công nợ, nếu chưa có thì tạo mới. SET công nợ TUYỆT ĐỐI (không phải
+// cộng/trừ), vì đây là nạp số dư ban đầu — khác với adjustDebt (ghi nhận biến động).
+export const importDebt = asyncHandler(async (req, res) => {
+  const rows = Array.isArray((req.body || {}).rows) ? req.body.rows : [];
+  if (!rows.length) throw badRequest("Không có dữ liệu để nhập");
+
+  const result = await withTransaction(async (c) => {
+    let created = 0, updated = 0;
+    const failed = [];
+    for (const row of rows) {
+      try {
+        const code = String(row.code || "").trim();
+        const name = String(row.name || "").trim();
+        const type = row.type === "supplier" ? "supplier" : "customer";
+        const debt = Number(row.debt) || 0;
+        if (!code || !name) throw new Error("Thiếu mã hoặc tên");
+
+        const { rows: upserted } = await c.query(
+          `INSERT INTO partners(code, name, type, debt) VALUES($1,$2,$3,$4)
+           ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, debt = EXCLUDED.debt
+           RETURNING (xmax = 0) AS inserted`,
+          [code, name, type, debt]
+        );
+        if (upserted[0].inserted) created++; else updated++;
+      } catch (e) {
+        failed.push(`${row.code || "?"}: ${e.message}`);
+      }
+    }
+    return { created, updated, failed };
+  });
+  res.status(201).json(result);
+});

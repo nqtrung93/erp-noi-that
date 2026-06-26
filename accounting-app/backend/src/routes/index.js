@@ -28,6 +28,7 @@ const partners = makeCrud("partners", ["name", "type", "phone", "contact", "addr
 r.get("/partners", verifyToken, requirePerm("partners_view"), partners.list);
 r.get("/partners/:id", verifyToken, requirePerm("partners_view"), partners.getOne);
 r.post("/partners", verifyToken, requirePerm("partners_edit"), partner.create); // override: tự sinh mã
+r.post("/partners/import", verifyToken, requirePerm("partners_edit"), partner.importDebt);
 r.put("/partners/:id", verifyToken, requirePerm("partners_edit"), partners.update);
 r.delete("/partners/:id", verifyToken, requirePerm("partners_delete"), partners.remove);
 r.post("/partners/:id/debt", verifyToken, requirePerm("partners_edit"), partner.adjustDebt);
@@ -99,6 +100,7 @@ r.post("/stock/inbound", verifyToken, requirePerm("inventory_edit"), stock.inbou
 r.post("/stock/outbound", verifyToken, requirePerm("inventory_edit"), stock.outbound);
 r.post("/stock/adjust", verifyToken, requirePerm("inventory_edit"), stock.adjust);
 r.post("/stock/transfer", verifyToken, requirePerm("inventory_edit"), stock.transfer);
+r.post("/stock/import-opening", verifyToken, requirePerm("inventory_edit"), stock.importOpeningStock);
 
 // -------- Bán hàng: đơn hàng đa dòng sản phẩm --------
 r.get("/orders", verifyToken, requirePerm("orders_view"), order.list);
