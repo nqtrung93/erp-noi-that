@@ -9,6 +9,7 @@ import Modal from "../components/Modal.jsx";
 import Toolbar, { ToolbarButton } from "../components/Toolbar.jsx";
 import SearchSelect from "../components/SearchSelect.jsx";
 import ProductLinePicker from "../components/ProductLinePicker.jsx";
+import MoneyInput from "../components/MoneyInput.jsx";
 
 const STATUS_COLOR = {
   "Mới": "bg-amber-100 text-amber-700",
@@ -236,7 +237,7 @@ function CreateOrderModal({ products, warehouses, customers, stock, onClose, onS
                   onChangeProduct={(v) => updateItem(idx, "productId", v)} onChangeVariant={(v) => updateItem(idx, "variantId", v)} />
                 <input type="number" min="0" value={it.qty} onChange={(e) => updateItem(idx, "qty", e.target.value)}
                   placeholder="SL" className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
-                <input type="number" min="0" value={it.price} onChange={(e) => updateItem(idx, "price", e.target.value)}
+                <MoneyInput value={it.price} onChange={(v) => updateItem(idx, "price", v)}
                   placeholder="Giá" className="w-28 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
                 {items.length > 1 && (
                   <button type="button" onClick={() => removeLine(idx)} className="text-red-500 text-xs">Xoá</button>
@@ -249,19 +250,19 @@ function CreateOrderModal({ products, warehouses, customers, stock, onClose, onS
 
         <div className="grid grid-cols-4 gap-3">
           <div><label className="text-sm text-slate-500">Giảm giá</label>
-            <input type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+            <MoneyInput value={discount} onChange={setDiscount} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
           <div><label className="text-sm text-slate-500">VAT (%)</label>
             <input type="number" value={vatRate} disabled title="Tỷ lệ VAT cố định — đổi ở mục Cài đặt"
               className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base bg-slate-50 text-slate-500 cursor-not-allowed" /></div>
           <div><label className="text-sm text-slate-500">Phí ship</label>
-            <input type="number" min="0" value={shippingFee} onChange={(e) => setShippingFee(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+            <MoneyInput value={shippingFee} onChange={setShippingFee} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
           <div><label className="text-sm text-slate-500">Phương thức</label>
             <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base">
               <option>Tiền mặt</option><option>Chuyển khoản</option>
             </select></div>
         </div>
         <div><label className="text-sm text-slate-500">Thanh toán ngay</label>
-          <input type="number" min="0" value={paidNow} onChange={(e) => setPaidNow(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+          <MoneyInput value={paidNow} onChange={setPaidNow} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
 
         <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
           <div>Tạm tính: <span className="font-medium">{fmt(subtotal)}</span></div>
@@ -306,7 +307,7 @@ function PayOrderModal({ order, onClose, onSaved }) {
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div className="text-sm text-slate-500">Còn lại: <span className="font-semibold text-slate-800">{fmt(remaining)}</span></div>
         <div><label className="text-xs text-slate-500">Số tiền thu</label>
-          <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+          <MoneyInput value={amount} onChange={setAmount} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
         <div><label className="text-xs text-slate-500">Phương thức</label>
           <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
             <option>Tiền mặt</option><option>Chuyển khoản</option>

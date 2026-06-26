@@ -4,6 +4,7 @@ import * as payrollService from "../services/payroll.service.js";
 import { fmt } from "../utils/format.js";
 import Modal from "../components/Modal.jsx";
 import Toolbar, { ToolbarButton } from "../components/Toolbar.jsx";
+import MoneyInput from "../components/MoneyInput.jsx";
 
 const now = new Date();
 
@@ -208,9 +209,9 @@ function EmployeeModal({ onClose, onSaved }) {
           <input value={position} onChange={(e) => setPosition(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className="text-xs text-slate-500">Lương cơ bản</label>
-            <input type="number" value={baseSalary} onChange={(e) => setBaseSalary(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+            <MoneyInput value={baseSalary} onChange={setBaseSalary} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
           <div><label className="text-xs text-slate-500">Phụ cấp</label>
-            <input type="number" value={allowance} onChange={(e) => setAllowance(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+            <MoneyInput value={allowance} onChange={setAllowance} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
         </div>
         <p className="text-xs text-slate-400">Mức đóng BHXH lấy theo lương cơ bản. BHXH/BHYT/BHTN: NLĐ 10.5%, công ty đóng thêm 21.5%.</p>
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">

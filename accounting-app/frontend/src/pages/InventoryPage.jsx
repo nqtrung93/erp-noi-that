@@ -5,6 +5,7 @@ import * as partnersService from "../services/partners.service.js";
 import { fmt } from "../utils/format.js";
 import Modal from "../components/Modal.jsx";
 import Toolbar, { ToolbarButton } from "../components/Toolbar.jsx";
+import MoneyInput from "../components/MoneyInput.jsx";
 import { readCsvFile } from "../utils/importCsv.js";
 
 const TYPE_LABEL = { inbound: "Nhập", outbound: "Xuất", adjust: "Điều chỉnh", transfer_in: "Chuyển vào", transfer_out: "Chuyển ra" };
@@ -382,9 +383,9 @@ function ProductModal({ onClose, onSaved }) {
               <input value={sku} onChange={(e) => setSku(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="text-xs text-slate-500">Giá vốn</label>
-                <input type="number" value={cost} onChange={(e) => setCost(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+                <MoneyInput value={cost} onChange={setCost} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
               <div><label className="text-xs text-slate-500">Giá bán</label>
-                <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+                <MoneyInput value={price} onChange={setPrice} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
             </div>
           </>
         )}
@@ -416,8 +417,8 @@ function ProductModal({ onClose, onSaved }) {
                       <tr key={idx}>
                         <td className="py-1 pr-2">{attrsLabel(m.attrs)}</td>
                         <td className="py-1 pr-2"><input value={m.sku} onChange={(e) => updateRow(idx, "sku", e.target.value)} className="w-20 border border-slate-200 rounded px-1 py-0.5" /></td>
-                        <td className="py-1 pr-2"><input type="number" value={m.cost} onChange={(e) => updateRow(idx, "cost", e.target.value)} className="w-20 border border-slate-200 rounded px-1 py-0.5" /></td>
-                        <td className="py-1 pr-2"><input type="number" value={m.price} onChange={(e) => updateRow(idx, "price", e.target.value)} className="w-20 border border-slate-200 rounded px-1 py-0.5" /></td>
+                        <td className="py-1 pr-2"><MoneyInput value={m.cost} onChange={(v) => updateRow(idx, "cost", v)} className="w-20 border border-slate-200 rounded px-1 py-0.5" /></td>
+                        <td className="py-1 pr-2"><MoneyInput value={m.price} onChange={(v) => updateRow(idx, "price", v)} className="w-20 border border-slate-200 rounded px-1 py-0.5" /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -485,7 +486,7 @@ function StockMoveModal({ mode, products, warehouses, partners, onClose, onSaved
             <input type="number" min="0" value={qty} onChange={(e) => setQty(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
         </div>
         <div><label className="text-xs text-slate-500">{isInbound ? "Giá nhập / đơn vị" : "Giá bán / đơn vị"}</label>
-          <input type="number" min="0" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+          <MoneyInput value={unitPrice} onChange={setUnitPrice} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
         <div><label className="text-xs text-slate-500">{isInbound ? "Nhà cung cấp" : "Khách hàng"} (tuỳ chọn)</label>
           <select value={partnerId} onChange={(e) => setPartnerId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
             <option value="">— Không chọn —</option>

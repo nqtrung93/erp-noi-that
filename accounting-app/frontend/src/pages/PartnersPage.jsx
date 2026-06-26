@@ -4,6 +4,7 @@ import * as partnersService from "../services/partners.service.js";
 import { fmt } from "../utils/format.js";
 import Modal from "../components/Modal.jsx";
 import Toolbar, { ToolbarButton } from "../components/Toolbar.jsx";
+import MoneyInput from "../components/MoneyInput.jsx";
 import { readCsvFile } from "../utils/importCsv.js";
 
 const TYPE_LABEL = { customer: "Khách hàng", supplier: "Nhà cung cấp", other: "Khác" };
@@ -264,7 +265,7 @@ function DebtModal({ partner, onClose, onSaved }) {
         </div>
         <div>
           <label className="text-xs text-slate-500">Số tiền</label>
-          <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)}
+          <MoneyInput value={amount} onChange={setAmount}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </div>
         <div>

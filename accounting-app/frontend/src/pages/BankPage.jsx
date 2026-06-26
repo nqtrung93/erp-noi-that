@@ -4,6 +4,7 @@ import * as bankService from "../services/bank.service.js";
 import { fmt } from "../utils/format.js";
 import Modal from "../components/Modal.jsx";
 import Toolbar, { ToolbarButton } from "../components/Toolbar.jsx";
+import MoneyInput from "../components/MoneyInput.jsx";
 
 export default function BankPage() {
   const { can } = useAuth();
@@ -101,7 +102,7 @@ function CreateBankModal({ onClose, onSaved }) {
         <div><label className="text-xs text-slate-500">Số tài khoản</label>
           <input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
         <div><label className="text-xs text-slate-500">Số dư ban đầu</label>
-          <input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+          <MoneyInput value={openingBalance} onChange={setOpeningBalance} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Hủy</button>
           <button type="submit" disabled={saving} className="bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">{saving ? "Đang lưu…" : "Thêm"}</button>
