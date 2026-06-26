@@ -28,9 +28,9 @@ export const getOne = asyncHandler(async (req, res) => {
   res.json({ ...po, items });
 });
 
-// POST /api/purchases { supplierId, warehouseId, items:[{productId,variantId,qty,price}], discount, paidNow, method, note }
+// POST /api/purchases { supplierId, warehouseId, items:[{productId,variantId,qty,price}], discount, vatRate, shippingFee, paidNow, method, note }
 export const create = asyncHandler(async (req, res) => {
-  const { supplierId, warehouseId, items, discount, paidNow, method, note } = req.body || {};
+  const { supplierId, warehouseId, items, discount, vatRate, shippingFee, paidNow, method, note } = req.body || {};
   if (!warehouseId) throw badRequest("Thiếu kho nhập hàng");
   if (!Array.isArray(items) || !items.length) throw badRequest("Đơn mua cần ít nhất 1 sản phẩm");
 
@@ -60,13 +60,17 @@ export const create = asyncHandler(async (req, res) => {
     }
 
     const disc = Number(discount) || 0;
-    const total = Math.max(subtotal - disc, 0);
+    const vatPct = Number(vatRate) || 0;
+    const ship = Number(shippingFee) || 0;
+    const afterDiscount = Math.max(subtotal - disc, 0);
+    const vatAmount = Math.round(afterDiscount * vatPct) / 100;
+    const total = Math.max(afterDiscount + vatAmount + ship, 0);
     const paid = Math.min(Number(paidNow) || 0, total);
 
     const po = (await c.query(
-      `INSERT INTO purchase_orders(code, supplier_id, supplier_name, warehouse_id, subtotal, discount, total, paid, note, created_by)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [code, supplierId || null, supplier?.name || null, warehouseId, subtotal, disc, total, paid, note || null, req.user.sub]
+      `INSERT INTO purchase_orders(code, supplier_id, supplier_name, warehouse_id, subtotal, discount, vat_rate, vat_amount, shipping_fee, total, paid, note, created_by)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [code, supplierId || null, supplier?.name || null, warehouseId, subtotal, disc, vatPct, vatAmount, ship, total, paid, note || null, req.user.sub]
     )).rows[0];
 
     for (const line of lineRows) {

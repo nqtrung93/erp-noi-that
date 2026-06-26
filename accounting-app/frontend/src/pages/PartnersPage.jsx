@@ -180,7 +180,7 @@ function CreatePartnerModal({ onClose, onSaved }) {
   }
 
   return (
-    <Modal title="Thêm đối tượng công nợ" onClose={onClose}>
+    <Modal title="Thêm đối tượng công nợ" onClose={onClose} size="lg">
       <form onSubmit={submit} className="space-y-3">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div>
@@ -250,7 +250,7 @@ function DebtModal({ partner, onClose, onSaved }) {
   }
 
   return (
-    <Modal title={`Ghi/thu nợ — ${partner.name}`} onClose={onClose}>
+    <Modal title={`Ghi/thu nợ — ${partner.name}`} onClose={onClose} size="lg">
       <form onSubmit={submit} className="space-y-3">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div className="text-sm text-slate-500">Công nợ hiện tại: <span className="font-semibold text-slate-800">{fmt(partner.debt)}</span></div>

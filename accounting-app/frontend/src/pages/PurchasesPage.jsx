@@ -3,6 +3,7 @@ import { useAuth } from "../store/auth.store.jsx";
 import * as purchasesService from "../services/purchases.service.js";
 import * as inventoryService from "../services/inventory.service.js";
 import * as partnersService from "../services/partners.service.js";
+import * as settingsService from "../services/settings.service.js";
 import { fmt } from "../utils/format.js";
 import Modal from "../components/Modal.jsx";
 import Toolbar, { ToolbarButton } from "../components/Toolbar.jsx";
@@ -124,14 +125,20 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, 
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id || "");
   const [items, setItems] = useState([{ productId: "", variantId: "", qty: 1, price: 0 }]);
   const [discount, setDiscount] = useState("");
+  const [vatRate, setVatRate] = useState("0");
+  const [shippingFee, setShippingFee] = useState("");
   const [paidNow, setPaidNow] = useState("");
   const [method, setMethod] = useState("Tiền mặt");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => { settingsService.getVatRate().then((r) => setVatRate(String(r.rate))).catch(() => {}); }, []);
+
   const subtotal = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
-  const total = Math.max(subtotal - (Number(discount) || 0), 0);
+  const afterDiscount = Math.max(subtotal - (Number(discount) || 0), 0);
+  const vatAmount = Math.round(afterDiscount * (Number(vatRate) || 0)) / 100;
+  const total = Math.max(afterDiscount + vatAmount + (Number(shippingFee) || 0), 0);
 
   function updateItem(idx, field, value) {
     setItems((prev) => prev.map((it, i) => {
@@ -166,29 +173,30 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, 
       await purchasesService.createPurchase({
         supplierId: supplierId || null, warehouseId,
         items: items.map((it) => ({ productId: it.productId, variantId: it.variantId || null, qty: Number(it.qty), price: Number(it.price) })),
-        discount: Number(discount) || 0, paidNow: Number(paidNow) || 0, method, note: note || null,
+        discount: Number(discount) || 0, vatRate: Number(vatRate) || 0, shippingFee: Number(shippingFee) || 0,
+        paidNow: Number(paidNow) || 0, method, note: note || null,
       });
       onSaved();
     } catch (e2) { setError(e2.message); } finally { setSaving(false); }
   }
 
   return (
-    <Modal title="Tạo đơn mua hàng" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-3">
+    <Modal title="Tạo đơn mua hàng" onClose={onClose} size="xl">
+      <form onSubmit={submit} className="space-y-4 text-base">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-xs text-slate-500">Nhà cung cấp</label>
+        <div className="grid grid-cols-2 gap-4">
+          <div><label className="text-sm text-slate-500">Nhà cung cấp</label>
             <SearchSelect options={suppliers} value={supplierId} onChange={setSupplierId}
               getLabel={(s) => s.name} getValue={(s) => s.id} getSearchText={(s) => `${s.name} ${s.phone || ""} ${s.code}`}
               placeholder="— Chọn nhà cung cấp —" /></div>
-          <div><label className="text-xs text-slate-500">Kho nhập</label>
-            <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+          <div><label className="text-sm text-slate-500">Kho nhập</label>
+            <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base">
               {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select></div>
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs text-slate-500">Sản phẩm</label>
+          <label className="text-sm text-slate-500">Sản phẩm</label>
           {items.map((it, idx) => (
             <div key={idx} className="flex gap-2 items-center flex-wrap">
               <ProductLinePicker products={products} stock={stock} warehouseId={warehouseId}
@@ -203,27 +211,34 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, 
               )}
             </div>
           ))}
-          <button type="button" onClick={addLine} className="text-indigo-600 text-xs font-medium">+ Thêm dòng</button>
+          <button type="button" onClick={addLine} className="text-indigo-600 text-sm font-medium">+ Thêm dòng</button>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div><label className="text-xs text-slate-500">Giảm giá</label>
-            <input type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
-          <div><label className="text-xs text-slate-500">Thanh toán ngay</label>
-            <input type="number" min="0" value={paidNow} onChange={(e) => setPaidNow(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
-          <div><label className="text-xs text-slate-500">Phương thức</label>
-            <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+        <div className="grid grid-cols-4 gap-3">
+          <div><label className="text-sm text-slate-500">Giảm giá</label>
+            <input type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+          <div><label className="text-sm text-slate-500">VAT (%)</label>
+            <input type="number" min="0" max="100" step="0.5" value={vatRate} onChange={(e) => setVatRate(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+          <div><label className="text-sm text-slate-500">Phí ship</label>
+            <input type="number" min="0" value={shippingFee} onChange={(e) => setShippingFee(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+          <div><label className="text-sm text-slate-500">Phương thức</label>
+            <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base">
               <option>Tiền mặt</option><option>Chuyển khoản</option>
             </select></div>
         </div>
+        <div><label className="text-sm text-slate-500">Thanh toán ngay</label>
+          <input type="number" min="0" value={paidNow} onChange={(e) => setPaidNow(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
 
-        <div className="text-sm text-right space-y-0.5 border-t border-slate-100 pt-2">
+        <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
           <div>Tạm tính: <span className="font-medium">{fmt(subtotal)}</span></div>
-          <div className="font-semibold">Tổng cộng: {fmt(total)}</div>
+          {Number(discount) > 0 && <div>Giảm giá: <span className="font-medium">-{fmt(discount)}</span></div>}
+          {Number(vatRate) > 0 && <div>VAT ({vatRate}%): <span className="font-medium">{fmt(vatAmount)}</span></div>}
+          {Number(shippingFee) > 0 && <div>Phí ship: <span className="font-medium">{fmt(shippingFee)}</span></div>}
+          <div className="font-semibold text-lg">Tổng cộng: {fmt(total)}</div>
         </div>
 
-        <div><label className="text-xs text-slate-500">Ghi chú</label>
-          <input value={note} onChange={(e) => setNote(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+        <div><label className="text-sm text-slate-500">Ghi chú</label>
+          <input value={note} onChange={(e) => setNote(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
 
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Hủy</button>
@@ -252,7 +267,7 @@ function PayPurchaseModal({ purchase, onClose, onSaved }) {
   }
 
   return (
-    <Modal title={`Trả tiền — ${purchase.code}`} onClose={onClose}>
+    <Modal title={`Trả tiền — ${purchase.code}`} onClose={onClose} size="lg">
       <form onSubmit={submit} className="space-y-3">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div className="text-sm text-slate-500">Còn lại: <span className="font-semibold text-slate-800">{fmt(remaining)}</span></div>

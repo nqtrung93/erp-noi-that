@@ -300,7 +300,7 @@ function PayOrderModal({ order, onClose, onSaved }) {
   }
 
   return (
-    <Modal title={`Thu tiền — ${order.code}`} onClose={onClose}>
+    <Modal title={`Thu tiền — ${order.code}`} onClose={onClose} size="lg">
       <form onSubmit={submit} className="space-y-3">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div className="text-sm text-slate-500">Còn lại: <span className="font-semibold text-slate-800">{fmt(remaining)}</span></div>

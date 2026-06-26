@@ -197,7 +197,7 @@ function EmployeeModal({ onClose, onSaved }) {
   }
 
   return (
-    <Modal title="Thêm nhân viên" onClose={onClose}>
+    <Modal title="Thêm nhân viên" onClose={onClose} size="lg">
       <form onSubmit={submit} className="space-y-3">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div><label className="text-xs text-slate-500">Họ tên</label>

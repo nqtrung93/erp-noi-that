@@ -90,7 +90,7 @@ function CreateBankModal({ onClose, onSaved }) {
   }
 
   return (
-    <Modal title="Thêm tài khoản ngân hàng" onClose={onClose}>
+    <Modal title="Thêm tài khoản ngân hàng" onClose={onClose} size="lg">
       <form onSubmit={submit} className="space-y-3">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div><label className="text-xs text-slate-500">Tên gợi nhớ</label>
@@ -120,7 +120,7 @@ function BankTransactionsModal({ account, onClose }) {
   }, [account.id]);
 
   return (
-    <Modal title={`Giao dịch — ${account.name}`} onClose={onClose}>
+    <Modal title={`Giao dịch — ${account.name}`} onClose={onClose} size="lg">
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2 mb-2">{error}</div>}
       <div className="max-h-96 overflow-y-auto">
         <table className="w-full text-sm">

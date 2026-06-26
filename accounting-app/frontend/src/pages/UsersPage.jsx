@@ -118,7 +118,7 @@ function UserModal({ user, roles, onClose, onSaved }) {
   }
 
   return (
-    <Modal title={isNew ? "Thêm tài khoản" : "Sửa tài khoản"} onClose={onClose}>
+    <Modal title={isNew ? "Thêm tài khoản" : "Sửa tài khoản"} onClose={onClose} size="lg">
       <form onSubmit={submit} className="space-y-3">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div className="grid grid-cols-2 gap-3">
