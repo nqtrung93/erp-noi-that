@@ -27,6 +27,7 @@ export default function PurchasesPage() {
   const [suppliers, setSuppliers] = useState([]);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [viewingPurchase, setViewingPurchase] = useState(null);
   const [editingPurchase, setEditingPurchase] = useState(null);
   const [confirmingPurchase, setConfirmingPurchase] = useState(null);
   const [paying, setPaying] = useState(null);
@@ -97,6 +98,7 @@ export default function PurchasesPage() {
                   <td className="py-2 px-3 whitespace-nowrap text-slate-400">{new Date(o.created_at).toLocaleDateString("vi-VN")}</td>
                   <td className="py-2 px-3">
                     <div className="flex gap-2 justify-end text-xs flex-wrap">
+                      <button onClick={() => setViewingPurchase(o)} className="text-slate-600 hover:underline">Xem</button>
                       {can("purchases_edit") && ["Nháp", "Mới"].includes(o.status) && (
                         <button onClick={() => setEditingPurchase(o)} className="text-sky-600 hover:underline">Sửa</button>
                       )}
@@ -126,6 +128,9 @@ export default function PurchasesPage() {
         <CreatePurchaseModal products={products} warehouses={warehouses} suppliers={suppliers} stock={stock}
           onProductCreated={addProduct}
           onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }} />
+      )}
+      {viewingPurchase && (
+        <ViewPurchaseModal purchase={viewingPurchase} onClose={() => setViewingPurchase(null)} />
       )}
       {editingPurchase && (
         <EditPurchaseModal purchase={editingPurchase} products={products} stock={stock}
@@ -427,6 +432,70 @@ function ConfirmPurchaseModal({ purchase, onClose, onSaved }) {
           <button type="submit" disabled={saving} className="bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">{saving ? "Đang xử lý…" : "Xác nhận đơn"}</button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+// Xem chi tiết đơn mua (chỉ đọc) — hiện đủ dòng sản phẩm, tổng tiền, thanh toán.
+function ViewPurchaseModal({ purchase, onClose }) {
+  const [full, setFull] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    purchasesService.getPurchase(purchase.id).then(setFull).catch((e) => setError(e.message));
+  }, [purchase.id]);
+
+  const remaining = Number(purchase.total) - Number(purchase.paid);
+
+  return (
+    <Modal title={`Chi tiết đơn mua — ${purchase.code}`} onClose={onClose} size="xl">
+      {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2 mb-3">{error}</div>}
+      {!full ? (
+        <p className="text-sm text-slate-400 py-6 text-center">Đang tải…</p>
+      ) : (
+        <div className="space-y-4 text-base">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>Nhà cung cấp: <span className="font-medium text-slate-700">{full.supplier_name || "—"}</span></div>
+            <div>Kho nhập: <span className="font-medium text-slate-700">{full.warehouse_name}</span></div>
+            <div>Trạng thái: <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[full.status]}`}>{full.status}</span></div>
+            <div>Ngày tạo: <span className="font-medium text-slate-700">{new Date(full.created_at).toLocaleString("vi-VN")}</span></div>
+          </div>
+
+          <div>
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-slate-400 text-xs border-b border-slate-100">
+                <th className="py-1.5">Sản phẩm</th><th className="py-1.5 text-right">SL</th>
+                <th className="py-1.5 text-right">Giá</th><th className="py-1.5 text-right">Thành tiền</th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-50">
+                {full.items.map((it) => (
+                  <tr key={it.id}>
+                    <td className="py-1.5">{it.product_name}{it.variant_attrs ? <span className="text-slate-400"> ({Object.values(it.variant_attrs).join(" / ")})</span> : ""}</td>
+                    <td className="py-1.5 text-right">{it.qty}</td>
+                    <td className="py-1.5 text-right">{fmt(it.price)}</td>
+                    <td className="py-1.5 text-right font-medium">{fmt(it.qty * it.price)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
+            {Number(full.discount) > 0 && <div>Giảm giá: <span className="font-medium">-{fmt(full.discount)}</span></div>}
+            {Number(full.vat_amount) > 0 && <div>VAT ({full.vat_rate}%): <span className="font-medium">{fmt(full.vat_amount)}</span></div>}
+            {Number(full.shipping_fee) > 0 && <div>Phí ship: <span className="font-medium">{fmt(full.shipping_fee)}</span></div>}
+            <div className="font-semibold text-lg">Tổng cộng: {fmt(full.total)}</div>
+            <div className="text-sm text-emerald-600">Đã trả: {fmt(full.paid)}</div>
+            {remaining > 0 && <div className="text-sm text-red-500">Còn lại: {fmt(remaining)}</div>}
+          </div>
+
+          {full.note && <div className="text-sm text-slate-500">Ghi chú: {full.note}</div>}
+
+          <div className="flex justify-end pt-2 border-t border-slate-100">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Đóng</button>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
