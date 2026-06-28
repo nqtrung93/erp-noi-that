@@ -726,11 +726,12 @@ function OrderFormModal({ order, onClose, onSaved, ecommerce = false }) {
                 )}
               </div>
               {!isNewCustomer ? (
-                <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
-                  <option value="">— Khách lẻ —</option>
-                  {customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` (${c.phone})` : ""}</option>)}
-                </select>
+                <ProductPicker
+                  options={[{ key: "", label: "— Khách lẻ —" }, ...customers.map((c) => ({ key: c.id, label: c.name, sku: c.phone }))]}
+                  value={customerId}
+                  onSelect={(o) => setCustomerId(o.key)}
+                  placeholder="Tìm theo tên hoặc số điện thoại…"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
               ) : (
                 <div className="space-y-2 border border-slate-200 rounded-lg p-2">
                   <input placeholder="Tên khách hàng" value={newCustomer.name}

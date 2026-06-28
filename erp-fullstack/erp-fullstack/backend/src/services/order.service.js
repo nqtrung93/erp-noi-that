@@ -119,18 +119,23 @@ export async function updateOrder(orderId, input, actorId) {
     const vatAmount = requiresVat ? Math.round(base - base / (1 + vatRate / 100)) : 0;
     const total = base + shipping;
 
+    // Thu hộ COD phải luôn khớp phương thức thanh toán — nếu đổi sang/khỏi COD lúc sửa đơn,
+    // is_cod tự đổi theo, không cần tick tay + Lưu riêng ở tab Vận chuyển.
+    const effectivePayment = input.payment || order.payment;
+    const isCod = effectivePayment === "COD";
+
     await client.query(
       `UPDATE orders SET
           customer_id = $1, discount = $2, shipping = $3, requires_vat = $4, vat_rate = $5, vat_amount = $6,
           vat_invoice_status = CASE WHEN $4 AND vat_invoice_status IS NULL THEN 'Chưa xuất' WHEN NOT $4 THEN NULL ELSE vat_invoice_status END,
           total = $7, payment = COALESCE($8, payment), note = $9, carrier = COALESCE($10, carrier),
-          order_source = COALESCE($11, order_source)
+          order_source = COALESCE($11, order_source), is_cod = $13
         WHERE id = $12`,
       [
         input.customerId !== undefined ? input.customerId : order.customer_id,
         discount, shipping, requiresVat, vatRate, vatAmount, total,
         input.payment || null, input.note !== undefined ? input.note : order.note,
-        input.carrier !== undefined ? input.carrier : null, input.source || null, orderId,
+        input.carrier !== undefined ? input.carrier : null, input.source || null, orderId, isCod,
       ]
     );
 
