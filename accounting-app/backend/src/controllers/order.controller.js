@@ -189,7 +189,7 @@ export const update = asyncHandler(async (req, res) => {
       const newRemaining = total - Number(order.paid);
       const delta = newRemaining - oldRemaining;
       if (delta !== 0) {
-        await c.query(`UPDATE partners SET debt = GREATEST(debt + $1, 0) WHERE id = $2`, [delta, order.customer_id]);
+        await c.query(`UPDATE partners SET debt = debt + $1 WHERE id = $2`, [delta, order.customer_id]);
       }
     }
 
@@ -280,7 +280,7 @@ export const changeStatus = asyncHandler(async (req, res) => {
       }
       const remaining = Number(order.total) - Number(order.paid);
       if (remaining > 0 && order.customer_id) {
-        await c.query(`UPDATE partners SET debt = GREATEST(debt - $1, 0) WHERE id = $2`, [remaining, order.customer_id]);
+        await c.query(`UPDATE partners SET debt = debt - $1 WHERE id = $2`, [remaining, order.customer_id]);
       }
     }
 
@@ -310,7 +310,7 @@ export const addPayment = asyncHandler(async (req, res) => {
     )).rows[0];
 
     if (order.customer_id) {
-      await c.query(`UPDATE partners SET debt = GREATEST(debt - $1, 0) WHERE id = $2`, [amt, order.customer_id]);
+      await c.query(`UPDATE partners SET debt = debt - $1 WHERE id = $2`, [amt, order.customer_id]);
     }
     const updated = (await c.query(`UPDATE orders SET paid = paid + $1 WHERE id = $2 RETURNING *`, [amt, order.id])).rows[0];
 

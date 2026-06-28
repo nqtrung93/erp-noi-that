@@ -41,7 +41,7 @@ export const adjustDebt = asyncHandler(async (req, res) => {
 
     const delta = direction === "increase" ? Number(amount) : -Number(amount);
     const updated = (await c.query(
-      `UPDATE partners SET debt = GREATEST(debt + $1, 0) WHERE id = $2 RETURNING *`,
+      `UPDATE partners SET debt = debt + $1 WHERE id = $2 RETURNING *`,
       [delta, partner.id]
     )).rows[0];
 
