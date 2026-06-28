@@ -112,11 +112,22 @@ export const invoice = asyncHandler(async (req, res) => {
   res.type("html").send(html);
 });
 
-// GET /api/orders/:id/invoice/pdf → file PDF tải về, tên file = <mã đơn>_PhieuBanHang.pdf
+// GET /api/orders/:id/invoice/pdf → file PDF tải về, tên file = <mã đơn>_<mã sản phẩm 1>_<mã sản phẩm 2>...pdf
 export const invoicePdf = asyncHandler(async (req, res) => {
   const order = await orderService.getOrderById(req.params.id);
   if (!order) throw notFound();
   const html = await renderInvoiceHtml(req.params.id);
   const buffer = await htmlToPdfBuffer(html);
-  sendPdf(res, buffer, `${toFileSlug(order.code)}_PhieuBanHang.pdf`);
+
+  const { rows: itemRows } = await query(
+    `SELECT COALESCE(v.sku, p.sku, p.code) AS code
+       FROM order_items oi
+       JOIN products p ON p.id = oi.product_id
+       LEFT JOIN product_variants v ON v.id = oi.variant_id
+      WHERE oi.order_id = $1`,
+    [req.params.id]
+  );
+  const productCodes = itemRows.map((r) => toFileSlug(r.code)).filter(Boolean);
+  const filename = [toFileSlug(order.code), ...productCodes].join("_") + ".pdf";
+  sendPdf(res, buffer, filename);
 });
