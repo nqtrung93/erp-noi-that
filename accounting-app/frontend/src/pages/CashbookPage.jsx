@@ -15,6 +15,7 @@ export default function CashbookPage() {
   const [bankAccounts, setBankAccounts] = useState([]);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [viewing, setViewing] = useState(null);
   const [typeFilter, setTypeFilter] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -106,9 +107,12 @@ export default function CashbookPage() {
                 <td className="py-2 px-3 text-slate-500">{t.note || "—"}</td>
                 <td className="py-2 px-3 whitespace-nowrap text-slate-400">{new Date(t.date).toLocaleDateString("vi-VN")}</td>
                 <td className="py-2 px-3">
-                  {can("cashbook_delete") && (
-                    <button onClick={() => remove(t.id)} className="text-red-500 text-xs hover:underline">Xoá</button>
-                  )}
+                  <div className="flex gap-2 justify-end text-xs">
+                    <button onClick={() => setViewing(t)} className="text-slate-600 hover:underline">Xem</button>
+                    {can("cashbook_delete") && (
+                      <button onClick={() => remove(t.id)} className="text-red-500 hover:underline">Xoá</button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -120,7 +124,35 @@ export default function CashbookPage() {
       {creating && (
         <CreateTransactionModal categories={categories} bankAccounts={bankAccounts} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }} />
       )}
+      {viewing && (
+        <ViewTransactionModal transaction={viewing} bankAccounts={bankAccounts} onClose={() => setViewing(null)} />
+      )}
     </div>
+  );
+}
+
+function ViewTransactionModal({ transaction: t, bankAccounts, onClose }) {
+  const bankAccount = bankAccounts.find((b) => String(b.id) === String(t.bank_account_id));
+  return (
+    <Modal title={`Chi tiết phiếu — ${t.code}`} onClose={onClose} size="lg">
+      <div className="space-y-3 text-sm">
+        <div className="flex justify-between">
+          <span className="text-slate-500">Loại phiếu</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${t.type === "Thu" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{t.type}</span>
+        </div>
+        <div className="flex justify-between"><span className="text-slate-500">Số tiền</span>
+          <span className={`font-semibold text-lg ${t.type === "Thu" ? "text-emerald-600" : "text-red-500"}`}>{t.type === "Thu" ? "+" : "-"}{fmt(t.amount)}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">Danh mục</span><span className="font-medium">{t.category_label || t.category_name || "—"}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">Phương thức</span><span className="font-medium">{t.method || "—"}</span></div>
+        {bankAccount && <div className="flex justify-between"><span className="text-slate-500">Tài khoản ngân hàng</span><span className="font-medium">{bankAccount.name}</span></div>}
+        <div className="flex justify-between"><span className="text-slate-500">Đối tượng</span><span className="font-medium">{t.partner_name || "—"}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">Ngày</span><span className="font-medium">{new Date(t.date).toLocaleDateString("vi-VN")}</span></div>
+        <div><span className="text-slate-500">Ghi chú</span><p className="font-medium mt-1">{t.note || "—"}</p></div>
+        <div className="flex justify-end pt-2 border-t border-slate-100">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Đóng</button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

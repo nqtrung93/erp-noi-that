@@ -25,6 +25,7 @@ export default function InventoryPage() {
   const [partners, setPartners] = useState([]);
   const [error, setError] = useState("");
   const [modal, setModal] = useState(null); // 'inbound' | 'outbound' | 'adjust' | 'transfer' | 'product'
+  const [viewingMove, setViewingMove] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [importingStock, setImportingStock] = useState(false);
@@ -226,7 +227,7 @@ export default function InventoryPage() {
           <table className="w-full text-sm">
             <thead><tr className="text-left text-slate-400 text-xs">
               <th className="py-2 px-3">Mã phiếu</th><th className="py-2 px-3">Loại</th><th className="py-2 px-3">Sản phẩm</th>
-              <th className="py-2 px-3">Kho</th><th className="py-2 px-3 text-right">SL</th><th className="py-2 px-3">Đối tượng</th><th className="py-2 px-3">Ngày</th>
+              <th className="py-2 px-3">Kho</th><th className="py-2 px-3 text-right">SL</th><th className="py-2 px-3">Đối tượng</th><th className="py-2 px-3">Ngày</th><th className="py-2 px-3"></th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
               {movements.map((m) => (
@@ -240,6 +241,9 @@ export default function InventoryPage() {
                   </td>
                   <td className="py-2 px-3 text-slate-500">{m.partner_name || "—"}</td>
                   <td className="py-2 px-3 whitespace-nowrap text-slate-400">{new Date(m.created_at).toLocaleString("vi-VN")}</td>
+                  <td className="py-2 px-3 text-right">
+                    <button onClick={() => setViewingMove(m)} className="text-slate-600 text-xs hover:underline">Xem</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -286,7 +290,29 @@ export default function InventoryPage() {
       {modal === "outbound" && <StockMoveModal mode="outbound" products={products} warehouses={warehouses} partners={partners} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}
       {modal === "adjust" && <AdjustModal products={products} warehouses={warehouses} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}
       {modal === "transfer" && <TransferModal products={products} warehouses={warehouses} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}
+      {viewingMove && <ViewMovementModal movement={viewingMove} onClose={() => setViewingMove(null)} />}
     </div>
+  );
+}
+
+function ViewMovementModal({ movement: m, onClose }) {
+  return (
+    <Modal title={`Chi tiết phiếu — ${m.code}`} onClose={onClose} size="lg">
+      <div className="space-y-3 text-sm">
+        <div className="flex justify-between"><span className="text-slate-500">Loại phiếu</span><span className="font-medium">{TYPE_LABEL[m.type] || m.type}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">Sản phẩm</span>
+          <span className="font-medium">{m.product_name}{m.variant_attrs && <span className="text-slate-400"> ({attrsLabel(m.variant_attrs)})</span>}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">Kho</span><span className="font-medium">{m.warehouse_name}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">Số lượng</span>
+          <span className={`font-semibold ${Number(m.qty_change) > 0 ? "text-emerald-600" : "text-red-500"}`}>{Number(m.qty_change) > 0 ? "+" : ""}{m.qty_change}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">Đối tượng</span><span className="font-medium">{m.partner_name || "—"}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">Ngày</span><span className="font-medium">{new Date(m.created_at).toLocaleString("vi-VN")}</span></div>
+        <div><span className="text-slate-500">Ghi chú</span><p className="font-medium mt-1">{m.note || "—"}</p></div>
+        <div className="flex justify-end pt-2 border-t border-slate-100">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Đóng</button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
