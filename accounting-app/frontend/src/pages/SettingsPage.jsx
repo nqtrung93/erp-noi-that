@@ -40,18 +40,32 @@ function WarehousesManager() {
   const { can } = useAuth();
   const [warehouses, setWarehouses] = useState([]);
   const [editing, setEditing] = useState(null); // null = đóng, {} = thêm mới, {...} = sửa
+  const [defaultWarehouseId, setDefaultWarehouseId] = useState("");
+  const [savingDefault, setSavingDefault] = useState(false);
   const [error, setError] = useState("");
 
   async function reload() {
     try { setWarehouses(await inventoryService.listWarehouses()); }
     catch (e) { setError(e.message); }
   }
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    reload();
+    settingsService.getDefaultWarehouse().then((r) => setDefaultWarehouseId(r.warehouseId || "")).catch(() => {});
+  }, []);
 
   async function remove(id) {
     if (!confirm("Xoá kho này?")) return;
     try { await inventoryService.removeWarehouse(id); reload(); }
     catch (e) { alert(e.message); }
+  }
+
+  async function saveDefault(e) {
+    const id = e.target.value;
+    setDefaultWarehouseId(id);
+    setSavingDefault(true);
+    try { await settingsService.setDefaultWarehouse(id || null); }
+    catch (e2) { setError(e2.message); }
+    finally { setSavingDefault(false); }
   }
 
   return (
@@ -68,6 +82,15 @@ function WarehousesManager() {
         )}
       </div>
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 max-w-md">
+        <label className="text-xs text-slate-500">Kho mặc định khi tạo đơn bán/đơn mua</label>
+        <select value={defaultWarehouseId} onChange={saveDefault} disabled={savingDefault}
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1">
+          <option value="">— Không đặt mặc định —</option>
+          {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+      </div>
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 divide-y divide-slate-100 max-w-2xl">
         {warehouses.map((w) => (
           <div key={w.id} className="flex items-center justify-between px-4 py-3">

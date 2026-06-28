@@ -6,6 +6,9 @@ export const updateCompanyInfo = (data) => api.put("/settings/company", data);
 export const getVatRate = () => api.get("/settings/vat-rate");
 export const setVatRate = (rate) => api.put("/settings/vat-rate", { rate });
 
+export const getDefaultWarehouse = () => api.get("/settings/default-warehouse");
+export const setDefaultWarehouse = (warehouseId) => api.put("/settings/default-warehouse", { warehouseId });
+
 export const getDocFormats = () => api.get("/settings/doc-formats");
 export const setDocFormat = (type, prefix, pad) => api.put("/settings/doc-formats", { type, prefix, pad });
 

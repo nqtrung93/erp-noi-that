@@ -93,6 +93,20 @@ r.put("/settings/vat-rate", verifyToken, requirePerm("settings_edit"), asyncHand
   res.json({ rate });
 }));
 
+// -------- Kho mặc định (tự chọn sẵn khi tạo đơn bán/đơn mua) --------
+r.get("/settings/default-warehouse", verifyToken, requirePerm("settings_view"), asyncHandler(async (req, res) => {
+  const { rows } = await query(`SELECT value FROM app_settings WHERE key = 'default_warehouse_id'`);
+  res.json({ warehouseId: rows[0]?.value || null });
+}));
+r.put("/settings/default-warehouse", verifyToken, requirePerm("settings_edit"), asyncHandler(async (req, res) => {
+  const { warehouseId } = req.body || {};
+  await query(
+    `INSERT INTO app_settings(key, value) VALUES('default_warehouse_id', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [warehouseId ? String(warehouseId) : null]
+  );
+  res.json({ warehouseId: warehouseId || null });
+}));
+
 // -------- Kho hàng: sản phẩm (+ biến thể), kho, nhập/xuất/điều chỉnh/luân chuyển --------
 r.get("/products", verifyToken, requirePerm("inventory_view"), product.list);
 r.get("/products/:id", verifyToken, requirePerm("inventory_view"), product.getOne);
@@ -122,6 +136,8 @@ r.post("/stock/import-opening", verifyToken, requirePerm("inventory_edit"), stoc
 r.get("/orders", verifyToken, requirePerm("orders_view"), order.list);
 r.get("/orders/:id", verifyToken, requirePerm("orders_view"), order.getOne);
 r.post("/orders", verifyToken, requirePerm("orders_edit"), order.create);
+r.put("/orders/:id", verifyToken, requirePerm("orders_edit"), order.update);
+r.post("/orders/:id/confirm", verifyToken, requirePerm("orders_edit"), order.confirm);
 r.patch("/orders/:id/status", verifyToken, requirePerm("orders_edit"), order.changeStatus);
 r.post("/orders/:id/payments", verifyToken, requirePerm("orders_edit"), order.addPayment);
 r.get("/orders/:id/invoice", verifyToken, requirePerm("orders_view"), order.invoice);
@@ -130,6 +146,8 @@ r.get("/orders/:id/invoice", verifyToken, requirePerm("orders_view"), order.invo
 r.get("/purchases", verifyToken, requirePerm("purchases_view"), purchase.list);
 r.get("/purchases/:id", verifyToken, requirePerm("purchases_view"), purchase.getOne);
 r.post("/purchases", verifyToken, requirePerm("purchases_edit"), purchase.create);
+r.put("/purchases/:id", verifyToken, requirePerm("purchases_edit"), purchase.update);
+r.post("/purchases/:id/confirm", verifyToken, requirePerm("purchases_edit"), purchase.confirm);
 r.patch("/purchases/:id/status", verifyToken, requirePerm("purchases_edit"), purchase.changeStatus);
 r.post("/purchases/:id/payments", verifyToken, requirePerm("purchases_edit"), purchase.addPayment);
 

@@ -213,6 +213,9 @@ CREATE TABLE IF NOT EXISTS orders (
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS vat_rate NUMERIC(5,2) NOT NULL DEFAULT 0; -- % VAT áp dụng cho đơn này
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(18,2) NOT NULL DEFAULT 0; -- tiền VAT = (subtotal-discount) * vat_rate/100
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee NUMERIC(18,2) NOT NULL DEFAULT 0; -- phí ship thu thêm khách, cộng vào total
+-- Cho phép trạng thái "Nháp": đơn lưu nháp KHÔNG trừ tồn kho / KHÔNG tạo phiếu thu / KHÔNG ghi công nợ.
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
+ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK (status IN ('Nháp', 'Mới', 'Hoàn thành', 'Đã hủy'));
 
 CREATE TABLE IF NOT EXISTS order_items (
   id SERIAL PRIMARY KEY,
@@ -256,6 +259,8 @@ ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS purchase_order_id INTEGER R
 ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS vat_rate NUMERIC(5,2) NOT NULL DEFAULT 0;
 ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(18,2) NOT NULL DEFAULT 0;
 ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS shipping_fee NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE purchase_orders DROP CONSTRAINT IF EXISTS purchase_orders_status_check;
+ALTER TABLE purchase_orders ADD CONSTRAINT purchase_orders_status_check CHECK (status IN ('Nháp', 'Mới', 'Hoàn thành', 'Đã hủy'));
 
 CREATE SEQUENCE IF NOT EXISTS tx_seq START 1;
 CREATE SEQUENCE IF NOT EXISTS debt_seq START 1;

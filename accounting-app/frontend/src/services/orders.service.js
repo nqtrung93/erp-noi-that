@@ -3,6 +3,8 @@ import { api } from "../api/client.js";
 export const listOrders = () => api.get("/orders");
 export const getOrder = (id) => api.get(`/orders/${id}`);
 export const createOrder = (data) => api.post("/orders", data);
+export const updateOrder = (id, data) => api.put(`/orders/${id}`, data);
+export const confirmOrder = (id, data) => api.post(`/orders/${id}/confirm`, data);
 export const changeOrderStatus = (id, status) => api.patch(`/orders/${id}/status`, { status });
 export const addOrderPayment = (id, data) => api.post(`/orders/${id}/payments`, data);
 export async function openInvoice(id) {

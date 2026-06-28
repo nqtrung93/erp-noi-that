@@ -12,6 +12,7 @@ import ProductLinePicker from "../components/ProductLinePicker.jsx";
 import MoneyInput from "../components/MoneyInput.jsx";
 
 const STATUS_COLOR = {
+  "Nháp": "bg-slate-100 text-slate-600",
   "Mới": "bg-amber-100 text-amber-700",
   "Hoàn thành": "bg-emerald-100 text-emerald-700",
   "Đã hủy": "bg-red-100 text-red-700",
@@ -26,6 +27,8 @@ export default function PurchasesPage() {
   const [suppliers, setSuppliers] = useState([]);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [editingPurchase, setEditingPurchase] = useState(null);
+  const [confirmingPurchase, setConfirmingPurchase] = useState(null);
   const [paying, setPaying] = useState(null);
   const [statusFilter, setStatusFilter] = useState("");
 
@@ -40,6 +43,8 @@ export default function PurchasesPage() {
     inventoryService.listStock().then(setStock).catch(() => {});
     partnersService.listPartners().then((ps) => setSuppliers(ps.filter((p) => p.type === "supplier"))).catch(() => {});
   }, []);
+
+  function addProduct(p) { setProducts((prev) => [...prev, p]); }
 
   const filtered = purchases.filter((o) => !statusFilter || o.status === statusFilter);
 
@@ -57,6 +62,7 @@ export default function PurchasesPage() {
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
             className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm">
             <option value="">— Trạng thái —</option>
+            <option>Nháp</option>
             <option>Mới</option>
             <option>Hoàn thành</option>
             <option>Đã hủy</option>
@@ -90,7 +96,13 @@ export default function PurchasesPage() {
                   </td>
                   <td className="py-2 px-3 whitespace-nowrap text-slate-400">{new Date(o.created_at).toLocaleDateString("vi-VN")}</td>
                   <td className="py-2 px-3">
-                    <div className="flex gap-2 justify-end text-xs">
+                    <div className="flex gap-2 justify-end text-xs flex-wrap">
+                      {can("purchases_edit") && ["Nháp", "Mới"].includes(o.status) && (
+                        <button onClick={() => setEditingPurchase(o)} className="text-sky-600 hover:underline">Sửa</button>
+                      )}
+                      {can("purchases_edit") && o.status === "Nháp" && (
+                        <button onClick={() => setConfirmingPurchase(o)} className="text-emerald-600 hover:underline">Xác nhận</button>
+                      )}
                       {can("purchases_edit") && o.status === "Mới" && remaining > 0 && (
                         <button onClick={() => setPaying(o)} className="text-emerald-600 hover:underline">Trả tiền</button>
                       )}
@@ -112,7 +124,16 @@ export default function PurchasesPage() {
 
       {creating && (
         <CreatePurchaseModal products={products} warehouses={warehouses} suppliers={suppliers} stock={stock}
+          onProductCreated={addProduct}
           onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }} />
+      )}
+      {editingPurchase && (
+        <EditPurchaseModal purchase={editingPurchase} products={products} stock={stock}
+          onProductCreated={addProduct}
+          onClose={() => setEditingPurchase(null)} onSaved={() => { setEditingPurchase(null); reload(); }} />
+      )}
+      {confirmingPurchase && (
+        <ConfirmPurchaseModal purchase={confirmingPurchase} onClose={() => setConfirmingPurchase(null)} onSaved={() => { setConfirmingPurchase(null); reload(); }} />
       )}
       {paying && (
         <PayPurchaseModal purchase={paying} onClose={() => setPaying(null)} onSaved={() => { setPaying(null); reload(); }} />
@@ -121,7 +142,7 @@ export default function PurchasesPage() {
   );
 }
 
-function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, onSaved }) {
+function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProductCreated, onClose, onSaved }) {
   const [supplierId, setSupplierId] = useState("");
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id || "");
   const [items, setItems] = useState([{ productId: "", variantId: "", qty: 1, price: 0 }]);
@@ -135,6 +156,9 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, 
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { settingsService.getVatRate().then((r) => setVatRate(String(r.rate))).catch(() => {}); }, []);
+  useEffect(() => {
+    settingsService.getDefaultWarehouse().then((r) => { if (r.warehouseId) setWarehouseId(r.warehouseId); }).catch(() => {});
+  }, []);
 
   const subtotal = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
   const afterDiscount = Math.max(subtotal - (Number(discount) || 0), 0);
@@ -161,7 +185,7 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, 
   function addLine() { setItems((prev) => [...prev, { productId: "", variantId: "", qty: 1, price: 0 }]); }
   function removeLine(idx) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
 
-  async function submit(e) {
+  async function submit(e, isDraft) {
     e.preventDefault();
     setError("");
     if (!warehouseId) return setError("Thiếu kho nhập hàng");
@@ -174,8 +198,8 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, 
       await purchasesService.createPurchase({
         supplierId: supplierId || null, warehouseId,
         items: items.map((it) => ({ productId: it.productId, variantId: it.variantId || null, qty: Number(it.qty), price: Number(it.price) })),
-        discount: Number(discount) || 0, vatRate: Number(vatRate) || 0, shippingFee: Number(shippingFee) || 0,
-        paidNow: Number(paidNow) || 0, method, note: note || null,
+        discount: Number(discount) || 0, shippingFee: Number(shippingFee) || 0,
+        paidNow: Number(paidNow) || 0, method, note: note || null, isDraft,
       });
       onSaved();
     } catch (e2) { setError(e2.message); } finally { setSaving(false); }
@@ -183,7 +207,7 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, 
 
   return (
     <Modal title="Tạo đơn mua hàng" onClose={onClose} size="xl">
-      <form onSubmit={submit} className="space-y-4 text-base">
+      <form onSubmit={(e) => submit(e, false)} className="space-y-4 text-base">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div className="grid grid-cols-2 gap-4">
           <div><label className="text-sm text-slate-500">Nhà cung cấp</label>
@@ -201,12 +225,15 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, 
           {items.map((it, idx) => (
             <div key={idx} className="flex gap-2 items-center flex-wrap">
               <ProductLinePicker products={products} stock={stock} warehouseId={warehouseId}
-                productId={it.productId} variantId={it.variantId}
+                productId={it.productId} variantId={it.variantId} onProductCreated={onProductCreated}
                 onChangeProduct={(v) => updateItem(idx, "productId", v)} onChangeVariant={(v) => updateItem(idx, "variantId", v)} />
               <input type="number" min="0" value={it.qty} onChange={(e) => updateItem(idx, "qty", e.target.value)}
                 placeholder="SL" className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
               <MoneyInput value={it.price} onChange={(v) => updateItem(idx, "price", v)}
                 placeholder="Giá nhập" className="w-28 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
+              <span className="text-sm text-slate-600 font-medium w-28 text-right whitespace-nowrap">
+                {fmt((Number(it.qty) || 0) * (Number(it.price) || 0))}
+              </span>
               {items.length > 1 && (
                 <button type="button" onClick={() => removeLine(idx)} className="text-red-500 text-xs">Xoá</button>
               )}
@@ -241,7 +268,165 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onClose, 
 
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Hủy</button>
+          <button type="button" disabled={saving} onClick={(e) => submit(e, true)}
+            className="border border-slate-300 text-slate-600 text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">
+            {saving ? "Đang lưu…" : "Lưu nháp"}
+          </button>
           <button type="submit" disabled={saving} className="bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">{saving ? "Đang lưu…" : "Tạo đơn"}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// Sửa đơn mua khi còn Nháp/Mới — không đổi NCC/kho, chỉ sửa dòng sản phẩm/giảm giá/phí ship/ghi chú.
+function EditPurchaseModal({ purchase, products, stock, onProductCreated, onClose, onSaved }) {
+  const [items, setItems] = useState(null);
+  const [discount, setDiscount] = useState(String(purchase.discount));
+  const [shippingFee, setShippingFee] = useState(String(purchase.shipping_fee));
+  const [note, setNote] = useState(purchase.note || "");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    purchasesService.getPurchase(purchase.id).then((full) => {
+      setItems(full.items.map((it) => ({ productId: it.product_id, variantId: it.variant_id || "", qty: it.qty, price: it.price })));
+    }).catch((e) => setError(e.message));
+  }, [purchase.id]);
+
+  const subtotal = (items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
+  const afterDiscount = Math.max(subtotal - (Number(discount) || 0), 0);
+  const vatAmount = purchase.status === "Nháp" ? 0 : Math.round(afterDiscount * Number(purchase.vat_rate)) / 100;
+  const total = Math.max(afterDiscount + vatAmount + (Number(shippingFee) || 0), 0);
+
+  function updateItem(idx, field, value) {
+    setItems((prev) => prev.map((it, i) => {
+      if (i !== idx) return it;
+      const next = { ...it, [field]: value };
+      if (field === "productId") {
+        const p = products.find((pp) => String(pp.id) === String(value));
+        next.variantId = "";
+        if (p && !p.has_variants) next.price = p.cost || 0;
+      }
+      if (field === "variantId") {
+        const p = products.find((pp) => String(pp.id) === String(it.productId));
+        const v = p?.variants?.find((vv) => String(vv.id) === String(value));
+        if (v) next.price = v.cost || 0;
+      }
+      return next;
+    }));
+  }
+  function addLine() { setItems((prev) => [...prev, { productId: "", variantId: "", qty: 1, price: 0 }]); }
+  function removeLine(idx) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    if (items.some((it) => !it.productId || !it.qty)) return setError("Vui lòng chọn sản phẩm và số lượng cho mọi dòng");
+    setSaving(true);
+    try {
+      await purchasesService.updatePurchase(purchase.id, {
+        items: items.map((it) => ({ productId: it.productId, variantId: it.variantId || null, qty: Number(it.qty), price: Number(it.price) })),
+        discount: Number(discount) || 0, shippingFee: Number(shippingFee) || 0, note: note || null,
+      });
+      onSaved();
+    } catch (e2) { setError(e2.message); } finally { setSaving(false); }
+  }
+
+  return (
+    <Modal title={`Sửa đơn mua — ${purchase.code}`} onClose={onClose} size="xl">
+      {items === null ? (
+        <p className="text-sm text-slate-400 py-6 text-center">Đang tải…</p>
+      ) : (
+        <form onSubmit={submit} className="space-y-4 text-base">
+          {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
+          <div className="text-sm text-slate-500">
+            Nhà cung cấp: <span className="font-medium text-slate-700">{purchase.supplier_name || "—"}</span> ·
+            Kho: <span className="font-medium text-slate-700">{purchase.warehouse_name}</span>
+            <span className="text-xs text-slate-400"> (không đổi được khi sửa)</span>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs text-slate-500">Sản phẩm</label>
+            {items.map((it, idx) => (
+              <div key={idx} className="flex gap-2 items-center flex-wrap">
+                <ProductLinePicker products={products} stock={stock} warehouseId={purchase.warehouse_id}
+                  productId={it.productId} variantId={it.variantId} onProductCreated={onProductCreated}
+                  onChangeProduct={(v) => updateItem(idx, "productId", v)} onChangeVariant={(v) => updateItem(idx, "variantId", v)} />
+                <input type="number" min="0" value={it.qty} onChange={(e) => updateItem(idx, "qty", e.target.value)}
+                  placeholder="SL" className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
+                <MoneyInput value={it.price} onChange={(v) => updateItem(idx, "price", v)}
+                  placeholder="Giá nhập" className="w-28 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
+                <span className="text-sm text-slate-600 font-medium w-28 text-right whitespace-nowrap">
+                  {fmt((Number(it.qty) || 0) * (Number(it.price) || 0))}
+                </span>
+                {items.length > 1 && (
+                  <button type="button" onClick={() => removeLine(idx)} className="text-red-500 text-xs">Xoá</button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addLine} className="text-indigo-600 text-xs font-medium">+ Thêm dòng</button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-sm text-slate-500">Giảm giá</label>
+              <MoneyInput value={discount} onChange={setDiscount} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+            <div><label className="text-sm text-slate-500">Phí ship</label>
+              <MoneyInput value={shippingFee} onChange={setShippingFee} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+          </div>
+
+          <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
+            <div>Tạm tính: <span className="font-medium">{fmt(subtotal)}</span></div>
+            {Number(discount) > 0 && <div>Giảm giá: <span className="font-medium">-{fmt(discount)}</span></div>}
+            {Number(purchase.vat_rate) > 0 && purchase.status === "Mới" && <div>VAT ({purchase.vat_rate}%): <span className="font-medium">{fmt(vatAmount)}</span></div>}
+            {Number(shippingFee) > 0 && <div>Phí ship: <span className="font-medium">{fmt(shippingFee)}</span></div>}
+            <div className="font-semibold text-lg">Tổng cộng: {fmt(total)}</div>
+            {purchase.status === "Mới" && <div className="text-xs text-slate-400">Đã trả trước đó giữ nguyên: {fmt(purchase.paid)}</div>}
+          </div>
+
+          <div><label className="text-xs text-slate-500">Ghi chú</label>
+            <input value={note} onChange={(e) => setNote(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Hủy</button>
+            <button type="submit" disabled={saving} className="bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">{saving ? "Đang lưu…" : "Lưu thay đổi"}</button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+// Xác nhận đơn mua Nháp: nhập số tiền trả ngay (nếu có) rồi áp dụng tăng tồn kho + cập nhật giá vốn + tính VAT.
+function ConfirmPurchaseModal({ purchase, onClose, onSaved }) {
+  const [paidNow, setPaidNow] = useState("");
+  const [method, setMethod] = useState("Tiền mặt");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await purchasesService.confirmPurchase(purchase.id, { paidNow: Number(paidNow) || 0, method });
+      onSaved();
+    } catch (e2) { setError(e2.message); } finally { setSaving(false); }
+  }
+
+  return (
+    <Modal title={`Xác nhận đơn mua — ${purchase.code}`} onClose={onClose} size="lg">
+      <form onSubmit={submit} className="space-y-3">
+        {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
+        <p className="text-sm text-slate-500">Xác nhận sẽ tăng tồn kho theo các dòng đã lưu, cập nhật giá vốn và tính VAT hiện hành. Tạm tính: <span className="font-semibold text-slate-700">{fmt(purchase.total)}</span> (chưa gồm VAT).</p>
+        <div><label className="text-xs text-slate-500">Trả tiền ngay (tuỳ chọn)</label>
+          <MoneyInput value={paidNow} onChange={setPaidNow} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+        <div><label className="text-xs text-slate-500">Phương thức</label>
+          <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+            <option>Tiền mặt</option><option>Chuyển khoản</option>
+          </select></div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Hủy</button>
+          <button type="submit" disabled={saving} className="bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">{saving ? "Đang xử lý…" : "Xác nhận đơn"}</button>
         </div>
       </form>
     </Modal>

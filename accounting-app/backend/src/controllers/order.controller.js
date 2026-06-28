@@ -30,11 +30,33 @@ export const getOne = asyncHandler(async (req, res) => {
   res.json({ ...order, items });
 });
 
-// POST /api/orders { customerId, newCustomer:{name,phone,address}, warehouseId, items:[{productId,variantId,qty,price}], discount, shippingFee, paidNow, method, note }
+// Dựng danh sách dòng hàng (validate sản phẩm/biến thể, snapshot giá+giá vốn) — dùng chung cho create/update.
+async function buildLineRows(c, items) {
+  let subtotal = 0;
+  const lineRows = [];
+  for (const item of items) {
+    if (!item.productId || !item.qty || Number(item.qty) <= 0) throw badRequest("Dòng sản phẩm không hợp lệ");
+    const product = (await c.query(`SELECT * FROM products WHERE id = $1`, [item.productId])).rows[0];
+    if (!product) throw notFound(`Sản phẩm #${item.productId} không tồn tại`);
+    let variant = null;
+    if (item.variantId) {
+      variant = (await c.query(`SELECT * FROM product_variants WHERE id = $1`, [item.variantId])).rows[0];
+      if (!variant) throw notFound(`Biến thể #${item.variantId} không tồn tại`);
+    }
+    const price = item.price !== undefined ? Number(item.price) : Number(variant?.price ?? product.price ?? 0);
+    const cost = Number(variant?.cost ?? product.cost ?? 0);
+    subtotal += price * Number(item.qty);
+    lineRows.push({ productId: product.id, variantId: variant?.id || null, qty: Number(item.qty), price, cost });
+  }
+  return { subtotal, lineRows };
+}
+
+// POST /api/orders { customerId, newCustomer:{name,phone,address}, warehouseId, items:[{productId,variantId,qty,price}], discount, shippingFee, paidNow, method, note, isDraft }
 // newCustomer: tạo nhanh khách lẻ ngay lúc lập đơn (khi customerId không có) — chỉ cần "name" là đủ.
 // VAT KHÔNG nhận từ client — luôn lấy tỷ lệ cố định ở Cài đặt để tránh người dùng tự sửa qua API.
+// isDraft=true: lưu nháp — KHÔNG trừ tồn kho, KHÔNG tạo phiếu thu, KHÔNG ghi công nợ. Dùng /confirm để áp dụng sau.
 export const create = asyncHandler(async (req, res) => {
-  const { customerId, newCustomer, warehouseId, items, discount, shippingFee, paidNow, method, note } = req.body || {};
+  const { customerId, newCustomer, warehouseId, items, discount, shippingFee, paidNow, method, note, isDraft } = req.body || {};
   if (!warehouseId) throw badRequest("Thiếu kho xuất hàng");
   if (!Array.isArray(items) || !items.length) throw badRequest("Đơn hàng cần ít nhất 1 sản phẩm");
 
@@ -57,35 +79,20 @@ export const create = asyncHandler(async (req, res) => {
       resolvedCustomerId = customer.id;
     }
 
-    let subtotal = 0;
-    const lineRows = [];
-    for (const item of items) {
-      if (!item.productId || !item.qty || Number(item.qty) <= 0) throw badRequest("Dòng sản phẩm không hợp lệ");
-      const product = (await c.query(`SELECT * FROM products WHERE id = $1`, [item.productId])).rows[0];
-      if (!product) throw notFound(`Sản phẩm #${item.productId} không tồn tại`);
-      let variant = null;
-      if (item.variantId) {
-        variant = (await c.query(`SELECT * FROM product_variants WHERE id = $1`, [item.variantId])).rows[0];
-        if (!variant) throw notFound(`Biến thể #${item.variantId} không tồn tại`);
-      }
-      const price = item.price !== undefined ? Number(item.price) : Number(variant?.price ?? product.price ?? 0);
-      const cost = Number(variant?.cost ?? product.cost ?? 0);
-      subtotal += price * Number(item.qty);
-      lineRows.push({ productId: product.id, variantId: variant?.id || null, qty: Number(item.qty), price, cost });
-    }
+    const { subtotal, lineRows } = await buildLineRows(c, items);
 
     const disc = Number(discount) || 0;
-    const vatPct = vatRate;
     const ship = Number(shippingFee) || 0;
     const afterDiscount = Math.max(subtotal - disc, 0);
-    const vatAmount = Math.round(afterDiscount * vatPct) / 100;
+    const vatAmount = isDraft ? 0 : Math.round(afterDiscount * vatRate) / 100;
     const total = Math.max(afterDiscount + vatAmount + ship, 0);
-    const paid = Math.min(Number(paidNow) || 0, total);
+    const paid = isDraft ? 0 : Math.min(Number(paidNow) || 0, total);
+    const status = isDraft ? "Nháp" : "Mới";
 
     const order = (await c.query(
-      `INSERT INTO orders(code, customer_id, customer_name, warehouse_id, subtotal, discount, vat_rate, vat_amount, shipping_fee, total, paid, note, created_by)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [code, resolvedCustomerId, customer?.name || null, warehouseId, subtotal, disc, vatPct, vatAmount, ship, total, paid, note || null, req.user.sub]
+      `INSERT INTO orders(code, customer_id, customer_name, warehouse_id, status, subtotal, discount, vat_rate, vat_amount, shipping_fee, total, paid, note, created_by)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      [code, resolvedCustomerId, customer?.name || null, warehouseId, status, subtotal, disc, isDraft ? 0 : vatRate, vatAmount, ship, total, paid, note || null, req.user.sub]
     )).rows[0];
 
     for (const line of lineRows) {
@@ -93,12 +100,138 @@ export const create = asyncHandler(async (req, res) => {
         `INSERT INTO order_items(order_id, product_id, variant_id, qty, price, cost_at_sale) VALUES($1,$2,$3,$4,$5,$6)`,
         [order.id, line.productId, line.variantId, line.qty, line.price, line.cost]
       );
-      await upsertStock(c, line.productId, line.variantId, warehouseId, -line.qty);
+      if (!isDraft) {
+        await upsertStock(c, line.productId, line.variantId, warehouseId, -line.qty);
+        const moveCode = await nextDocNo(c, "outbound");
+        await c.query(
+          `INSERT INTO stock_movements(code, product_id, variant_id, warehouse_id, qty_change, type, partner_id, order_id, note, created_by)
+           VALUES($1,$2,$3,$4,$5,'outbound',$6,$7,$8,$9)`,
+          [moveCode, line.productId, line.variantId, warehouseId, -line.qty, resolvedCustomerId, order.id, `Đơn hàng ${code}`, req.user.sub]
+        );
+      }
+    }
+
+    let transaction = null;
+    if (!isDraft && paid > 0) {
+      const txCode = await nextDocNo(c, "transaction");
+      transaction = (await c.query(
+        `INSERT INTO transactions(code, type, category_name, amount, method, partner_id, partner_name, note, created_by)
+         VALUES($1,'Thu','Bán hàng',$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [txCode, paid, method || null, resolvedCustomerId, customer?.name || null, `Thanh toán đơn ${code}`, req.user.sub]
+      )).rows[0];
+    }
+
+    if (!isDraft) {
+      const remaining = total - paid;
+      if (remaining > 0 && customer) {
+        const debtCode = await nextDocNo(c, "debt");
+        await c.query(
+          `INSERT INTO debt_entries(code, partner_id, direction, amount, note, created_by) VALUES($1,$2,'increase',$3,$4,$5)`,
+          [debtCode, customer.id, remaining, `Đơn hàng ${code} chưa thanh toán hết`, req.user.sub]
+        );
+        await c.query(`UPDATE partners SET debt = debt + $1 WHERE id = $2`, [remaining, customer.id]);
+      }
+    }
+
+    return { order, transaction };
+  });
+  res.status(201).json(result);
+});
+
+// PUT /api/orders/:id { items, discount, shippingFee, note } — sửa đơn khi còn "Nháp" hoặc "Mới".
+// Đơn "Nháp": chỉ thay dữ liệu, không đụng tồn kho. Đơn "Mới": hoàn tồn các dòng cũ rồi áp lại tồn
+// theo dòng mới, điều chỉnh công nợ khách theo CHÊNH LỆCH số tiền còn lại (không đổi số đã thanh toán).
+export const update = asyncHandler(async (req, res) => {
+  const { items, discount, shippingFee, note } = req.body || {};
+  if (!Array.isArray(items) || !items.length) throw badRequest("Đơn hàng cần ít nhất 1 sản phẩm");
+
+  const result = await withTransaction(async (c) => {
+    const order = (await c.query(`SELECT * FROM orders WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
+    if (!order) throw notFound();
+    if (!["Nháp", "Mới"].includes(order.status)) throw badRequest("Chỉ sửa được đơn đang ở trạng thái Nháp hoặc Mới");
+
+    const oldItems = (await c.query(`SELECT * FROM order_items WHERE order_id = $1`, [order.id])).rows;
+
+    if (order.status === "Mới") {
+      for (const item of oldItems) {
+        await upsertStock(c, item.product_id, item.variant_id, order.warehouse_id, Number(item.qty));
+        const moveCode = await nextDocNo(c, "inbound");
+        await c.query(
+          `INSERT INTO stock_movements(code, product_id, variant_id, warehouse_id, qty_change, type, order_id, note, created_by)
+           VALUES($1,$2,$3,$4,$5,'inbound',$6,$7,$8)`,
+          [moveCode, item.product_id, item.variant_id, order.warehouse_id, Number(item.qty), order.id, `Sửa đơn ${order.code} — hoàn tồn cũ`, req.user.sub]
+        );
+      }
+    }
+    await c.query(`DELETE FROM order_items WHERE order_id = $1`, [order.id]);
+
+    const { subtotal, lineRows } = await buildLineRows(c, items);
+    const disc = Number(discount) || 0;
+    const ship = Number(shippingFee) || 0;
+    const afterDiscount = Math.max(subtotal - disc, 0);
+    const vatAmount = order.status === "Nháp" ? 0 : Math.round(afterDiscount * Number(order.vat_rate)) / 100;
+    const total = Math.max(afterDiscount + vatAmount + ship, 0);
+
+    for (const line of lineRows) {
+      await c.query(
+        `INSERT INTO order_items(order_id, product_id, variant_id, qty, price, cost_at_sale) VALUES($1,$2,$3,$4,$5,$6)`,
+        [order.id, line.productId, line.variantId, line.qty, line.price, line.cost]
+      );
+      if (order.status === "Mới") {
+        await upsertStock(c, line.productId, line.variantId, order.warehouse_id, -line.qty);
+        const moveCode = await nextDocNo(c, "outbound");
+        await c.query(
+          `INSERT INTO stock_movements(code, product_id, variant_id, warehouse_id, qty_change, type, partner_id, order_id, note, created_by)
+           VALUES($1,$2,$3,$4,$5,'outbound',$6,$7,$8,$9)`,
+          [moveCode, line.productId, line.variantId, order.warehouse_id, -line.qty, order.customer_id, order.id, `Sửa đơn ${order.code}`, req.user.sub]
+        );
+      }
+    }
+
+    if (order.status === "Mới" && order.customer_id) {
+      const oldRemaining = Number(order.total) - Number(order.paid);
+      const newRemaining = total - Number(order.paid);
+      const delta = newRemaining - oldRemaining;
+      if (delta !== 0) {
+        await c.query(`UPDATE partners SET debt = GREATEST(debt + $1, 0) WHERE id = $2`, [delta, order.customer_id]);
+      }
+    }
+
+    const updated = (await c.query(
+      `UPDATE orders SET subtotal=$1, discount=$2, vat_amount=$3, shipping_fee=$4, total=$5, note=$6 WHERE id=$7 RETURNING *`,
+      [subtotal, disc, vatAmount, ship, total, note || null, order.id]
+    )).rows[0];
+    return updated;
+  });
+  res.json(result);
+});
+
+// POST /api/orders/:id/confirm { paidNow, method } — xác nhận đơn Nháp: áp dụng trừ tồn kho,
+// tính VAT theo tỷ lệ hiện tại, tạo phiếu thu (nếu có thanh toán) + ghi công nợ phần còn lại.
+export const confirm = asyncHandler(async (req, res) => {
+  const { paidNow, method } = req.body || {};
+
+  const result = await withTransaction(async (c) => {
+    const order = (await c.query(`SELECT * FROM orders WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
+    if (!order) throw notFound();
+    if (order.status !== "Nháp") throw badRequest("Chỉ xác nhận được đơn đang ở trạng thái Nháp");
+
+    const items = (await c.query(`SELECT * FROM order_items WHERE order_id = $1`, [order.id])).rows;
+    const vatSetting = (await c.query(`SELECT value FROM app_settings WHERE key = 'vat_rate'`)).rows[0];
+    const vatRate = vatSetting?.value ? Number(vatSetting.value) : 0;
+
+    const afterDiscount = Math.max(Number(order.subtotal) - Number(order.discount), 0);
+    const vatAmount = Math.round(afterDiscount * vatRate) / 100;
+    const total = Math.max(afterDiscount + vatAmount + Number(order.shipping_fee), 0);
+    const paid = Math.min(Number(paidNow) || 0, total);
+
+    for (const item of items) {
+      await upsertStock(c, item.product_id, item.variant_id, order.warehouse_id, -Number(item.qty));
       const moveCode = await nextDocNo(c, "outbound");
       await c.query(
         `INSERT INTO stock_movements(code, product_id, variant_id, warehouse_id, qty_change, type, partner_id, order_id, note, created_by)
          VALUES($1,$2,$3,$4,$5,'outbound',$6,$7,$8,$9)`,
-        [moveCode, line.productId, line.variantId, warehouseId, -line.qty, resolvedCustomerId, order.id, `Đơn hàng ${code}`, req.user.sub]
+        [moveCode, item.product_id, item.variant_id, order.warehouse_id, -Number(item.qty), order.customer_id, order.id, `Xác nhận đơn ${order.code}`, req.user.sub]
       );
     }
 
@@ -108,21 +241,25 @@ export const create = asyncHandler(async (req, res) => {
       transaction = (await c.query(
         `INSERT INTO transactions(code, type, category_name, amount, method, partner_id, partner_name, note, created_by)
          VALUES($1,'Thu','Bán hàng',$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [txCode, paid, method || null, resolvedCustomerId, customer?.name || null, `Thanh toán đơn ${code}`, req.user.sub]
+        [txCode, paid, method || null, order.customer_id, order.customer_name, `Thanh toán đơn ${order.code}`, req.user.sub]
       )).rows[0];
     }
 
     const remaining = total - paid;
-    if (remaining > 0 && customer) {
+    if (remaining > 0 && order.customer_id) {
       const debtCode = await nextDocNo(c, "debt");
       await c.query(
         `INSERT INTO debt_entries(code, partner_id, direction, amount, note, created_by) VALUES($1,$2,'increase',$3,$4,$5)`,
-        [debtCode, customer.id, remaining, `Đơn hàng ${code} chưa thanh toán hết`, req.user.sub]
+        [debtCode, order.customer_id, remaining, `Đơn hàng ${order.code} chưa thanh toán hết`, req.user.sub]
       );
-      await c.query(`UPDATE partners SET debt = debt + $1 WHERE id = $2`, [remaining, customer.id]);
+      await c.query(`UPDATE partners SET debt = debt + $1 WHERE id = $2`, [remaining, order.customer_id]);
     }
 
-    return { order, transaction };
+    const updated = (await c.query(
+      `UPDATE orders SET status='Mới', vat_rate=$1, vat_amount=$2, total=$3, paid=$4 WHERE id=$5 RETURNING *`,
+      [vatRate, vatAmount, total, paid, order.id]
+    )).rows[0];
+    return { order: updated, transaction };
   });
   res.status(201).json(result);
 });
