@@ -230,8 +230,10 @@ function MovementsTab({ warehouses }) {
                 <td className="py-2 px-4 text-slate-500">{m.created_by_name}</td>
                 <td className="py-2 px-4">
                   {m.doc_no && (
-                    <button onClick={() => printStockDoc(m.doc_no)} className="text-teal-600 hover:underline text-xs">In phiếu</button>
-                    <button onClick={() => downloadStockDocPdf(m.doc_no)} className="text-teal-600 hover:underline text-xs ml-2">Tải PDF</button>
+                    <>
+                      <button onClick={() => printStockDoc(m.doc_no)} className="text-teal-600 hover:underline text-xs">In phiếu</button>
+                      <button onClick={() => downloadStockDocPdf(m.doc_no)} className="text-teal-600 hover:underline text-xs ml-2">Tải PDF</button>
+                    </>
                   )}
                 </td>
               </tr>
@@ -307,7 +309,10 @@ function SimpleHistoryTable({ type, title, filename, refreshKey }) {
               <td className="py-2 px-4 text-slate-500">{m.created_by_name}</td>
               <td className="py-2 px-4">
                 {m.doc_no && (
-                  <button onClick={() => printStockDoc(m.doc_no)} className="text-teal-600 hover:underline text-xs">In phiếu</button>
+                  <>
+                    <button onClick={() => printStockDoc(m.doc_no)} className="text-teal-600 hover:underline text-xs">In phiếu</button>
+                    <button onClick={() => downloadStockDocPdf(m.doc_no)} className="text-teal-600 hover:underline text-xs ml-2">Tải PDF</button>
+                  </>
                 )}
               </td>
             </tr>
