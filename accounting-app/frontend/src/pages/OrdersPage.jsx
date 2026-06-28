@@ -289,7 +289,6 @@ function CreateOrderModal({ products, warehouses, customers, stock, onProductCre
         <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
           <div>Tạm tính: <span className="font-medium">{fmt(subtotal)}</span></div>
           {Number(discount) > 0 && <div>Giảm giá: <span className="font-medium">-{fmt(discount)}</span></div>}
-          {Number(vatRate) > 0 && <div>VAT ({vatRate}%): <span className="font-medium">{fmt(vatAmount)}</span></div>}
           {Number(shippingFee) > 0 && <div>Phí ship: <span className="font-medium">{fmt(shippingFee)}</span></div>}
           <div className="font-semibold text-lg">Tổng cộng: {fmt(total)}</div>
         </div>
@@ -409,7 +408,6 @@ function EditOrderModal({ order, products, stock, onProductCreated, onClose, onS
           <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
             <div>Tạm tính: <span className="font-medium">{fmt(subtotal)}</span></div>
             {Number(discount) > 0 && <div>Giảm giá: <span className="font-medium">-{fmt(discount)}</span></div>}
-            {Number(order.vat_rate) > 0 && order.status === "Mới" && <div>VAT ({order.vat_rate}%): <span className="font-medium">{fmt(vatAmount)}</span></div>}
             {Number(shippingFee) > 0 && <div>Phí ship: <span className="font-medium">{fmt(shippingFee)}</span></div>}
             <div className="font-semibold text-lg">Tổng cộng: {fmt(total)}</div>
             {order.status === "Mới" && <div className="text-xs text-slate-400">Đã thu trước đó giữ nguyên: {fmt(order.paid)}</div>}
