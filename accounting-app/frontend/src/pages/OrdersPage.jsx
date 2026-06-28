@@ -55,6 +55,12 @@ export default function OrdersPage() {
     catch (e) { setError(e.message); }
   }
 
+  async function removeOrder(id) {
+    if (!confirm("Xoá đơn nháp này? Không thể hoàn tác.")) return;
+    try { await ordersService.removeOrder(id); reload(); }
+    catch (e) { setError(e.message); }
+  }
+
   return (
     <div className="space-y-3">
       <Toolbar
@@ -114,6 +120,9 @@ export default function OrdersPage() {
                           <button onClick={() => setStatus(o.id, "Hoàn thành")} className="text-slate-500 hover:underline">Hoàn thành</button>
                           <button onClick={() => setStatus(o.id, "Đã hủy")} className="text-red-500 hover:underline">Hủy</button>
                         </>
+                      )}
+                      {can("orders_edit") && o.status === "Nháp" && (
+                        <button onClick={() => removeOrder(o.id)} className="text-red-500 hover:underline">Xoá</button>
                       )}
                     </div>
                   </td>

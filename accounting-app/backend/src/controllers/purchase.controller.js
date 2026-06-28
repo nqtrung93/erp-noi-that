@@ -248,6 +248,17 @@ export const confirm = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
+// DELETE /api/purchases/:id — chỉ xoá được đơn mua đang ở trạng thái "Nháp".
+export const remove = asyncHandler(async (req, res) => {
+  await withTransaction(async (c) => {
+    const po = (await c.query(`SELECT * FROM purchase_orders WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
+    if (!po) throw notFound();
+    if (po.status !== "Nháp") throw badRequest("Chỉ xoá được đơn mua đang ở trạng thái Nháp");
+    await c.query(`DELETE FROM purchase_orders WHERE id = $1`, [po.id]);
+  });
+  res.status(204).send();
+});
+
 // PATCH /api/purchases/:id/status { status: 'Hoàn thành' | 'Đã hủy' }
 export const changeStatus = asyncHandler(async (req, res) => {
   const { status } = req.body || {};

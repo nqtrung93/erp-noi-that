@@ -141,6 +141,7 @@ r.post("/orders/:id/confirm", verifyToken, requirePerm("orders_edit"), order.con
 r.patch("/orders/:id/status", verifyToken, requirePerm("orders_edit"), order.changeStatus);
 r.post("/orders/:id/payments", verifyToken, requirePerm("orders_edit"), order.addPayment);
 r.get("/orders/:id/invoice", verifyToken, requirePerm("orders_view"), order.invoice);
+r.delete("/orders/:id", verifyToken, requirePerm("orders_edit"), order.remove);
 
 // -------- Mua hàng: đơn mua đa dòng sản phẩm --------
 r.get("/purchases", verifyToken, requirePerm("purchases_view"), purchase.list);
@@ -150,6 +151,7 @@ r.put("/purchases/:id", verifyToken, requirePerm("purchases_edit"), purchase.upd
 r.post("/purchases/:id/confirm", verifyToken, requirePerm("purchases_edit"), purchase.confirm);
 r.patch("/purchases/:id/status", verifyToken, requirePerm("purchases_edit"), purchase.changeStatus);
 r.post("/purchases/:id/payments", verifyToken, requirePerm("purchases_edit"), purchase.addPayment);
+r.delete("/purchases/:id", verifyToken, requirePerm("purchases_edit"), purchase.remove);
 
 // -------- Lương nhân viên & BHXH --------
 const employees = makeCrud("employees", ["name", "phone", "position", "base_salary", "allowance", "insurance_base", "active"], "name");

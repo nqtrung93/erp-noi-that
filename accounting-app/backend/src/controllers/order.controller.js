@@ -257,6 +257,18 @@ export const confirm = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
+// DELETE /api/orders/:id — chỉ xoá được đơn đang ở trạng thái "Nháp" (chưa có ảnh hưởng
+// tồn kho/công nợ/tiền nào để hoàn lại). Đơn "Đã hủy" giữ lại làm lịch sử, không xoá được.
+export const remove = asyncHandler(async (req, res) => {
+  await withTransaction(async (c) => {
+    const order = (await c.query(`SELECT * FROM orders WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
+    if (!order) throw notFound();
+    if (order.status !== "Nháp") throw badRequest("Chỉ xoá được đơn đang ở trạng thái Nháp");
+    await c.query(`DELETE FROM orders WHERE id = $1`, [order.id]);
+  });
+  res.status(204).send();
+});
+
 // PATCH /api/orders/:id/status { status: 'Hoàn thành' | 'Đã hủy' }
 export const changeStatus = asyncHandler(async (req, res) => {
   const { status } = req.body || {};
