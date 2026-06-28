@@ -24,6 +24,7 @@ export default function CrmPage() {
   const [paying, setPaying] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [filterGroup, setFilterGroup] = useState("");
+  const [search, setSearch] = useState("");
 
   async function reload() {
     try {
@@ -69,17 +70,32 @@ export default function CrmPage() {
       </div>
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
 
-      <div>
-        <label className="text-xs text-slate-500 block mb-1">Nhóm khách hàng</label>
-        <select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)}
-          className="border border-slate-200 rounded-lg px-3 py-2 text-sm">
-          <option value="">Tất cả</option>
-          {groups.map((g) => <option key={g} value={g}>{g}</option>)}
-        </select>
+      <div className="flex flex-wrap gap-3">
+        <div>
+          <label className="text-xs text-slate-500 block mb-1">Tìm khách hàng</label>
+          <input value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm theo tên hoặc số điện thoại…"
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-64" />
+        </div>
+        <div>
+          <label className="text-xs text-slate-500 block mb-1">Nhóm khách hàng</label>
+          <select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm">
+            <option value="">Tất cả</option>
+            {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 divide-y divide-slate-100">
-        {customers.filter((c) => !filterGroup || c.group_name === filterGroup).map((c) => (
+        {customers
+          .filter((c) => !filterGroup || c.group_name === filterGroup)
+          .filter((c) => {
+            const q = search.trim().toLowerCase();
+            if (!q) return true;
+            return c.name.toLowerCase().includes(q) || (c.phone || "").toLowerCase().includes(q);
+          })
+          .map((c) => (
           <div key={c.id} className="flex items-center justify-between px-4 py-3">
             <div>
               <div className="font-bold text-slate-800">{c.name} <span className="text-xs font-normal text-slate-400">{c.code}</span></div>
