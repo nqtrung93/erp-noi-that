@@ -260,6 +260,11 @@ function ShippingRow({ order, carriers, canEdit, onSaved, selected, onToggleSele
     w.print();
   }
 
+  async function downloadShipmentPdf() {
+    try { await ordersService.downloadShipmentPdf(order.id); }
+    catch (e) { alert(e.message); }
+  }
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
       <div className="flex items-start gap-3 flex-wrap justify-between mb-3">
@@ -347,6 +352,9 @@ function ShippingRow({ order, carriers, canEdit, onSaved, selected, onToggleSele
           )}
           <button onClick={printShipment} className="border border-slate-200 text-slate-600 text-xs font-medium px-3 py-1.5 rounded-lg">
             In phiếu
+          </button>
+          <button onClick={downloadShipmentPdf} className="border border-slate-200 text-slate-600 text-xs font-medium px-3 py-1.5 rounded-lg">
+            Tải PDF
           </button>
         </div>
       </div>

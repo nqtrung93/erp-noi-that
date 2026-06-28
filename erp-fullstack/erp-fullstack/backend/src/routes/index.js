@@ -11,6 +11,8 @@ import * as transaction from "../controllers/transaction.controller.js";
 import { makeCrud } from "../controllers/crud.factory.js";
 import * as reportService from "../services/report.service.js";
 import { renderStockDocHtml, renderShipmentHtml, renderWarrantyHtml } from "../services/printDoc.service.js";
+import { getOrderById } from "../services/order.service.js";
+import { htmlToPdfBuffer, toFileSlug, sendPdf } from "../utils/pdf.js";
 import * as warrantyService from "../services/warranty.service.js";
 import * as resetData from "../services/resetData.service.js";
 import * as backupService from "../services/backup.service.js";
@@ -116,6 +118,7 @@ r.post("/orders/:id/collect-cod", verifyToken, requirePerm("finance_edit"), orde
 r.post("/orders/:id/pay-ship-cost", verifyToken, requirePerm("finance_edit"), order.payShipCost);
 r.delete("/orders/:id", verifyToken, requirePerm("orders_delete"), order.remove); // kiểm tra role Admin trong controller
 r.get("/orders/:id/invoice", verifyToken, requirePerm("orders_view"), order.invoice);
+r.get("/orders/:id/invoice/pdf", verifyToken, requirePerm("orders_view"), order.invoicePdf);
 
 // -------- Carriers (đơn vị vận chuyển) --------
 const carriers = makeCrud("carriers", ["name"]);
@@ -236,12 +239,30 @@ r.put("/settings/doc-formats", verifyToken, requirePerm("settings_edit"), asyncH
 }));
 
 // -------- In phiếu kho (nhập hàng / điều chỉnh / luân chuyển) theo số phiếu --------
+const STOCK_DOC_LABEL = { inbound: "PhieuNhapHang", adjust: "PhieuDieuChinhKho", transfer_out: "PhieuLuanChuyenKho", transfer_in: "PhieuLuanChuyenKho" };
 r.get("/stock/movements/print/:docNo", verifyToken, requirePerm("warehouse_view"),
   asyncHandler(async (req, res) => res.type("html").send(await renderStockDocHtml(req.params.docNo))));
+r.get("/stock/movements/print/:docNo/pdf", verifyToken, requirePerm("warehouse_view"),
+  asyncHandler(async (req, res) => {
+    const docNo = req.params.docNo;
+    const html = await renderStockDocHtml(docNo);
+    const { rows } = await query(`SELECT type FROM stock_movements WHERE doc_no = $1 LIMIT 1`, [docNo]);
+    const label = STOCK_DOC_LABEL[rows[0]?.type] || "PhieuKho";
+    const buffer = await htmlToPdfBuffer(html);
+    sendPdf(res, buffer, `${toFileSlug(docNo)}_${label}.pdf`);
+  }));
 
 // -------- In phiếu vận chuyển theo đơn --------
 r.get("/orders/:id/shipment-print", verifyToken, requirePerm("shipping_view"),
   asyncHandler(async (req, res) => res.type("html").send(await renderShipmentHtml(req.params.id))));
+r.get("/orders/:id/shipment-print/pdf", verifyToken, requirePerm("shipping_view"),
+  asyncHandler(async (req, res) => {
+    const order = await getOrderById(req.params.id);
+    if (!order) throw badRequest("Đơn không tồn tại");
+    const html = await renderShipmentHtml(req.params.id);
+    const buffer = await htmlToPdfBuffer(html);
+    sendPdf(res, buffer, `${toFileSlug(order.code)}_PhieuVanChuyen.pdf`);
+  }));
 
 // -------- Bảo hành: tra cứu theo mã phiếu/mã đơn/SĐT/tên KH/tên SP + in phiếu --------
 r.get("/warranties", verifyToken, requirePerm("warranty_view"),
@@ -251,6 +272,12 @@ r.get("/warranties/:id", verifyToken, requirePerm("warranty_view"),
 r.get("/warranties/:id/print", verifyToken, requirePerm("warranty_view"), asyncHandler(async (req, res) => {
   const w = await warrantyService.getWarrantyById(req.params.id);
   res.type("html").send(await renderWarrantyHtml(w));
+}));
+r.get("/warranties/:id/print/pdf", verifyToken, requirePerm("warranty_view"), asyncHandler(async (req, res) => {
+  const w = await warrantyService.getWarrantyById(req.params.id);
+  const html = await renderWarrantyHtml(w);
+  const buffer = await htmlToPdfBuffer(html);
+  sendPdf(res, buffer, `${toFileSlug(w.doc_no || w.order_code || "BaoHanh")}_PhieuBaoHanh.pdf`);
 }));
 
 // -------- Reset dữ liệu — CHỈ Admin (kiểm role cứng, không chỉ permission), bắt buộc gõ đúng

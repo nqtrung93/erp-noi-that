@@ -22,6 +22,10 @@ export const getInvoiceHtml = (id) => api.getRaw(`/orders/${id}/invoice`);
 // Lấy HTML phiếu vận chuyển (đã escape XSS ở backend) để in
 export const getShipmentPrintHtml = (id) => api.getRaw(`/orders/${id}/shipment-print`);
 
+// Tải hoá đơn bán hàng / phiếu vận chuyển dạng PDF (tên file tự đặt theo mã đơn)
+export const downloadInvoicePdf = (id) => api.downloadFile(`/orders/${id}/invoice/pdf`);
+export const downloadShipmentPdf = (id) => api.downloadFile(`/orders/${id}/shipment-print/pdf`);
+
 // Cập nhật thông tin vận chuyển (hãng ship, mã vận đơn, trạng thái giao)
 export const updateShipping = (id, data) => api.patch(`/orders/${id}/shipping`, data);
 

@@ -164,6 +164,11 @@ export default function OrdersPage() {
     w.print(); // mở luôn hộp thoại in của máy (trình duyệt người dùng) thay vì chỉ hiện trang xem trước
   }
 
+  async function downloadInvoicePdf(id) {
+    try { await ordersService.downloadInvoicePdf(id); }
+    catch (e) { alert(e.message); }
+  }
+
   function exportOrders() {
     exportCsv("don_hang.csv", [
       { key: "code", label: "Mã đơn" },
@@ -362,6 +367,7 @@ export default function OrdersPage() {
                     <div className="flex flex-wrap gap-x-2 gap-y-1 max-w-[220px]">
                       <button onClick={() => setViewingOrder(o)} className="text-xs text-teal-600 hover:underline font-medium">Chi tiết</button>
                       <button onClick={() => printInvoice(o.id)} className="text-xs text-slate-600 hover:underline">In đơn</button>
+                      <button onClick={() => downloadInvoicePdf(o.id)} className="text-xs text-slate-600 hover:underline">Tải PDF</button>
                       {can("finance_edit") && (
                         <button onClick={() => setPayingOrder(o)} className="text-xs text-slate-600 hover:underline">Thu/Chi</button>
                       )}
@@ -450,6 +456,7 @@ export default function OrdersPage() {
               <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-3 pt-2 border-t border-slate-100">
                 <button onClick={() => setViewingOrder(o)} className="text-xs text-teal-600 font-medium">Chi tiết</button>
                 <button onClick={() => printInvoice(o.id)} className="text-xs text-slate-600">In đơn</button>
+                <button onClick={() => downloadInvoicePdf(o.id)} className="text-xs text-slate-600">Tải PDF</button>
                 {can("finance_edit") && (
                   <button onClick={() => setPayingOrder(o)} className="text-xs text-slate-600">Thu/Chi</button>
                 )}

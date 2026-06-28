@@ -13,6 +13,12 @@ echo "==> 1) Lấy code mới nhất"
 cd "$APP_DIR"
 git pull
 
+echo "==> 1b) Đảm bảo có đủ thư viện hệ thống cho Chrome headless (xuất PDF) — bỏ qua nếu đã có"
+apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
+  libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libgtk-3-0 \
+  libasound2t64 2>/dev/null || apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+  libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libgtk-3-0 libasound2
+
 echo "==> 2) Cập nhật backend (cài lib mới nếu có + chạy migration DB)"
 cd "$BACKEND_DIR"
 npm install --omit=dev

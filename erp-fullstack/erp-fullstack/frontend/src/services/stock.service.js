@@ -10,3 +10,6 @@ export const transferStock = (data) => api.post("/stock/transfer", data); // dat
 
 // HTML phiếu (đã escape ở backend) để in theo số phiếu — dùng chung cho nhập hàng/điều chỉnh/luân chuyển.
 export const getMovementPrintHtml = (docNo) => api.getRaw(`/stock/movements/print/${docNo}`);
+
+// Tải phiếu kho dạng PDF (tên file tự đặt theo số phiếu)
+export const downloadMovementPdf = (docNo) => api.downloadFile(`/stock/movements/print/${docNo}/pdf`);

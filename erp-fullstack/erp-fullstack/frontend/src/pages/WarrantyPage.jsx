@@ -32,6 +32,11 @@ export default function WarrantyPage() {
     w.print();
   }
 
+  async function downloadWarrantyPdf(id) {
+    try { await warrantiesService.downloadWarrantyPdf(id); }
+    catch (e) { alert(e.message); }
+  }
+
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -62,6 +67,9 @@ export default function WarrantyPage() {
                   <Badge label={stillValid ? "Còn hạn" : "Hết hạn"} colorClass={stillValid ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"} />
                   <button onClick={() => printWarranty(w.id)} className="border border-slate-200 text-slate-600 text-xs font-medium px-3 py-1.5 rounded-lg">
                     In phiếu
+                  </button>
+                  <button onClick={() => downloadWarrantyPdf(w.id)} className="border border-slate-200 text-slate-600 text-xs font-medium px-3 py-1.5 rounded-lg">
+                    Tải PDF
                   </button>
                 </div>
               </div>

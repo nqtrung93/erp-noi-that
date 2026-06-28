@@ -2,6 +2,7 @@ import * as orderService from "../services/order.service.js";
 import { renderInvoiceHtml } from "../services/invoice.service.js";
 import { query } from "../config/db.js";
 import { asyncHandler, badRequest, notFound, forbidden } from "../utils/http.js";
+import { htmlToPdfBuffer, toFileSlug, sendPdf } from "../utils/pdf.js";
 
 export const list = asyncHandler(async (req, res) => {
   res.json(await orderService.listOrders({ sku: req.query.sku }));
@@ -109,4 +110,13 @@ export const updateVat = asyncHandler(async (req, res) => {
 export const invoice = asyncHandler(async (req, res) => {
   const html = await renderInvoiceHtml(req.params.id);
   res.type("html").send(html);
+});
+
+// GET /api/orders/:id/invoice/pdf → file PDF tải về, tên file = <mã đơn>_PhieuBanHang.pdf
+export const invoicePdf = asyncHandler(async (req, res) => {
+  const order = await orderService.getOrderById(req.params.id);
+  if (!order) throw notFound();
+  const html = await renderInvoiceHtml(req.params.id);
+  const buffer = await htmlToPdfBuffer(html);
+  sendPdf(res, buffer, `${toFileSlug(order.code)}_PhieuBanHang.pdf`);
 });

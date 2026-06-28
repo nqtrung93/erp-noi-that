@@ -68,6 +68,12 @@ CORS_ORIGIN=*
 PORT=4000
 ENV
 
+echo "==> 7b) Cài thư viện hệ thống cho Chrome headless (dùng để xuất PDF phiếu in)"
+apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
+  libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libgtk-3-0 \
+  libasound2t64 2>/dev/null || apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+  libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libgtk-3-0 libasound2
+
 echo "==> 8) Cài dependencies + tạo schema + seed admin"
 cd "$BACKEND_DIR"
 npm install --omit=dev

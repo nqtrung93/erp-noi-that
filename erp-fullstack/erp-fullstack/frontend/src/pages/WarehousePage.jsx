@@ -21,6 +21,12 @@ async function printStockDoc(docNo) {
   w.print();
 }
 
+async function downloadStockDocPdf(docNo) {
+  if (!docNo) return;
+  try { await stockService.downloadMovementPdf(docNo); }
+  catch (e) { alert(e.message); }
+}
+
 const SUB_TABS = [
   { id: "stock", label: "Tồn kho" },
   { id: "inbound", label: "Nhập hàng" },
@@ -225,6 +231,7 @@ function MovementsTab({ warehouses }) {
                 <td className="py-2 px-4">
                   {m.doc_no && (
                     <button onClick={() => printStockDoc(m.doc_no)} className="text-teal-600 hover:underline text-xs">In phiếu</button>
+                    <button onClick={() => downloadStockDocPdf(m.doc_no)} className="text-teal-600 hover:underline text-xs ml-2">Tải PDF</button>
                   )}
                 </td>
               </tr>
@@ -387,6 +394,7 @@ function TransferHistoryTable({ refreshKey }) {
               <td className="py-2 px-4 text-slate-500">{r.reason}</td>
               <td className="py-2 px-4">
                 <button onClick={() => printStockDoc(r.docNo)} className="text-teal-600 hover:underline text-xs">In phiếu</button>
+                <button onClick={() => downloadStockDocPdf(r.docNo)} className="text-teal-600 hover:underline text-xs ml-2">Tải PDF</button>
               </td>
             </tr>
           ))}
@@ -525,6 +533,10 @@ function InboundTab({ warehouses, products, suppliers }) {
           className="border border-slate-200 text-slate-600 text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">
           In phiếu
         </button>
+        <button type="button" disabled={!lastDocNo} onClick={() => downloadStockDocPdf(lastDocNo)}
+          className="border border-slate-200 text-slate-600 text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">
+          Tải PDF
+        </button>
       </div>
     </form>
     <SimpleHistoryTable type="inbound" title="Lịch sử nhập hàng" filename="phieu_nhap_hang.csv" refreshKey={refreshKey} />
@@ -634,6 +646,10 @@ function AdjustTab({ warehouses, products }) {
         <button type="button" disabled={!result?.docNo} onClick={() => printStockDoc(result?.docNo)}
           className="border border-slate-200 text-slate-600 text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">
           In phiếu
+        </button>
+        <button type="button" disabled={!result?.docNo} onClick={() => downloadStockDocPdf(result?.docNo)}
+          className="border border-slate-200 text-slate-600 text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">
+          Tải PDF
         </button>
       </div>
     </form>
@@ -756,6 +772,10 @@ function TransferTab({ warehouses, products }) {
         <button type="button" disabled={!lastTransfer} onClick={() => printStockDoc(lastTransfer.docNo)}
           className="border border-slate-200 text-slate-600 text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">
           In phiếu
+        </button>
+        <button type="button" disabled={!lastTransfer} onClick={() => downloadStockDocPdf(lastTransfer.docNo)}
+          className="border border-slate-200 text-slate-600 text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">
+          Tải PDF
         </button>
       </div>
     </form>
