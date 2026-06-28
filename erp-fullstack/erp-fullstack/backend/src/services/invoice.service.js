@@ -74,6 +74,7 @@ export async function renderInvoiceHtml(orderId) {
         <td>${escapeHtml(it.variant_sku || it.product_sku || it.product_code || "—")}</td>
         <td>${escapeHtml(it.name)}</td>
         <td style="text-align:center">${escapeHtml(it.qty)}</td>
+        <td style="text-align:right">${fmt(it.price_at_sale)}</td>
         <td style="text-align:right">${fmt(it.price_at_sale * it.qty)}</td>
       </tr>`
     )
@@ -98,7 +99,6 @@ export async function renderInvoiceHtml(orderId) {
     shippingOrVatLine: [
       order.discount > 0 ? `<div class="row"><span>Giảm giá:</span><span>− ${fmt(order.discount)}</span></div>` : "",
       order.shipping > 0 ? `<div class="row"><span>Phí vận chuyển:</span><span>${fmt(order.shipping)}</span></div>` : "",
-      order.vat_rate > 0 ? `<div class="row"><span>VAT (${escapeHtml(order.vat_rate)}%, đã gồm trong giá):</span><span>${fmt(order.vat_amount)}</span></div>` : "",
     ].join(""),
     total: fmt(order.total),
     paid: fmt(order.paid),

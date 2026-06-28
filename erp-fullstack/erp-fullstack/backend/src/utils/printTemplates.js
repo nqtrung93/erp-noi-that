@@ -54,12 +54,12 @@ export const DEFAULT_TEMPLATES = {
     <div class="col-left">
       <div class="section-title">Chi tiết đơn hàng</div>
       <table>
-        <thead><tr><th>Mã sản phẩm</th><th>Sản phẩm</th><th style="text-align:center">Số lượng</th><th style="text-align:right">Giá</th></tr></thead>
+        <thead><tr><th>Mã sản phẩm</th><th>Sản phẩm</th><th style="text-align:center">Số lượng</th><th style="text-align:right">Giá</th><th style="text-align:right">Thành tiền</th></tr></thead>
         <tbody>{{rowsHtml}}</tbody>
       </table>
 
       <div class="section-title">Thông tin thanh toán</div>
-      <div class="row"><span>Tổng giá sản phẩm:</span><span>{{subtotal}}</span></div>
+      <div class="row"><span>Tổng thành tiền:</span><span>{{subtotal}}</span></div>
       {{shippingOrVatLine}}
       <div class="row total"><span>Tổng tiền:</span><span>{{total}}</span></div>
       <div class="row"><span>Số tiền đã trả:</span><span>{{paid}}</span></div>
