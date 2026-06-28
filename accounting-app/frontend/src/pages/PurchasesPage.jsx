@@ -152,7 +152,6 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProduct
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id || "");
   const [items, setItems] = useState([{ productId: "", variantId: "", qty: 1, price: 0 }]);
   const [discount, setDiscount] = useState("");
-  const [vatRate, setVatRate] = useState("0");
   const [shippingFee, setShippingFee] = useState("");
   const [paidNow, setPaidNow] = useState("");
   const [method, setMethod] = useState("Tiền mặt");
@@ -160,15 +159,13 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProduct
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { settingsService.getVatRate().then((r) => setVatRate(String(r.rate))).catch(() => {}); }, []);
   useEffect(() => {
     settingsService.getDefaultWarehouse().then((r) => { if (r.warehouseId) setWarehouseId(r.warehouseId); }).catch(() => {});
   }, []);
 
   const subtotal = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
   const afterDiscount = Math.max(subtotal - (Number(discount) || 0), 0);
-  const vatAmount = Math.round(afterDiscount * (Number(vatRate) || 0)) / 100;
-  const total = Math.max(afterDiscount + vatAmount + (Number(shippingFee) || 0), 0);
+  const total = Math.max(afterDiscount + (Number(shippingFee) || 0), 0);
 
   function updateItem(idx, field, value) {
     setItems((prev) => prev.map((it, i) => {
@@ -261,7 +258,6 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProduct
           <MoneyInput value={paidNow} onChange={setPaidNow} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
 
         <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
-          <div>Tạm tính: <span className="font-medium">{fmt(subtotal)}</span></div>
           {Number(discount) > 0 && <div>Giảm giá: <span className="font-medium">-{fmt(discount)}</span></div>}
           {Number(shippingFee) > 0 && <div>Phí ship: <span className="font-medium">{fmt(shippingFee)}</span></div>}
           <div className="font-semibold text-lg">Tổng cộng: {fmt(total)}</div>
@@ -300,8 +296,7 @@ function EditPurchaseModal({ purchase, products, stock, onProductCreated, onClos
 
   const subtotal = (items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
   const afterDiscount = Math.max(subtotal - (Number(discount) || 0), 0);
-  const vatAmount = purchase.status === "Nháp" ? 0 : Math.round(afterDiscount * Number(purchase.vat_rate)) / 100;
-  const total = Math.max(afterDiscount + vatAmount + (Number(shippingFee) || 0), 0);
+  const total = Math.max(afterDiscount + (Number(shippingFee) || 0), 0);
 
   function updateItem(idx, field, value) {
     setItems((prev) => prev.map((it, i) => {
@@ -380,7 +375,6 @@ function EditPurchaseModal({ purchase, products, stock, onProductCreated, onClos
           </div>
 
           <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
-            <div>Tạm tính: <span className="font-medium">{fmt(subtotal)}</span></div>
             {Number(discount) > 0 && <div>Giảm giá: <span className="font-medium">-{fmt(discount)}</span></div>}
             {Number(shippingFee) > 0 && <div>Phí ship: <span className="font-medium">{fmt(shippingFee)}</span></div>}
             <div className="font-semibold text-lg">Tổng cộng: {fmt(total)}</div>

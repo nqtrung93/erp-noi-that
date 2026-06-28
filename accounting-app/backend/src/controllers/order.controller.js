@@ -62,8 +62,6 @@ export const create = asyncHandler(async (req, res) => {
 
   const result = await withTransaction(async (c) => {
     const code = await nextDocNo(c, "orders");
-    const vatSetting = (await c.query(`SELECT value FROM app_settings WHERE key = 'vat_rate'`)).rows[0];
-    const vatRate = vatSetting?.value ? Number(vatSetting.value) : 0;
 
     let customer = null;
     let resolvedCustomerId = customerId || null;
@@ -84,15 +82,14 @@ export const create = asyncHandler(async (req, res) => {
     const disc = Number(discount) || 0;
     const ship = Number(shippingFee) || 0;
     const afterDiscount = Math.max(subtotal - disc, 0);
-    const vatAmount = isDraft ? 0 : Math.round(afterDiscount * vatRate) / 100;
-    const total = Math.max(afterDiscount + vatAmount + ship, 0);
+    const total = Math.max(afterDiscount + ship, 0);
     const paid = isDraft ? 0 : Math.min(Number(paidNow) || 0, total);
     const status = isDraft ? "Nháp" : "Mới";
 
     const order = (await c.query(
       `INSERT INTO orders(code, customer_id, customer_name, warehouse_id, status, subtotal, discount, vat_rate, vat_amount, shipping_fee, total, paid, note, created_by)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-      [code, resolvedCustomerId, customer?.name || null, warehouseId, status, subtotal, disc, isDraft ? 0 : vatRate, vatAmount, ship, total, paid, note || null, req.user.sub]
+       VALUES($1,$2,$3,$4,$5,$6,$7,0,0,$8,$9,$10,$11,$12) RETURNING *`,
+      [code, resolvedCustomerId, customer?.name || null, warehouseId, status, subtotal, disc, ship, total, paid, note || null, req.user.sub]
     )).rows[0];
 
     for (const line of lineRows) {
@@ -169,8 +166,7 @@ export const update = asyncHandler(async (req, res) => {
     const disc = Number(discount) || 0;
     const ship = Number(shippingFee) || 0;
     const afterDiscount = Math.max(subtotal - disc, 0);
-    const vatAmount = order.status === "Nháp" ? 0 : Math.round(afterDiscount * Number(order.vat_rate)) / 100;
-    const total = Math.max(afterDiscount + vatAmount + ship, 0);
+    const total = Math.max(afterDiscount + ship, 0);
 
     for (const line of lineRows) {
       await c.query(
@@ -198,8 +194,8 @@ export const update = asyncHandler(async (req, res) => {
     }
 
     const updated = (await c.query(
-      `UPDATE orders SET subtotal=$1, discount=$2, vat_amount=$3, shipping_fee=$4, total=$5, note=$6 WHERE id=$7 RETURNING *`,
-      [subtotal, disc, vatAmount, ship, total, note || null, order.id]
+      `UPDATE orders SET subtotal=$1, discount=$2, vat_amount=0, shipping_fee=$3, total=$4, note=$5 WHERE id=$6 RETURNING *`,
+      [subtotal, disc, ship, total, note || null, order.id]
     )).rows[0];
     return updated;
   });
@@ -207,7 +203,7 @@ export const update = asyncHandler(async (req, res) => {
 });
 
 // POST /api/orders/:id/confirm { paidNow, method } — xác nhận đơn Nháp: áp dụng trừ tồn kho,
-// tính VAT theo tỷ lệ hiện tại, tạo phiếu thu (nếu có thanh toán) + ghi công nợ phần còn lại.
+// tạo phiếu thu (nếu có thanh toán) + ghi công nợ phần còn lại. VAT không còn được áp dụng.
 export const confirm = asyncHandler(async (req, res) => {
   const { paidNow, method } = req.body || {};
 
@@ -217,12 +213,9 @@ export const confirm = asyncHandler(async (req, res) => {
     if (order.status !== "Nháp") throw badRequest("Chỉ xác nhận được đơn đang ở trạng thái Nháp");
 
     const items = (await c.query(`SELECT * FROM order_items WHERE order_id = $1`, [order.id])).rows;
-    const vatSetting = (await c.query(`SELECT value FROM app_settings WHERE key = 'vat_rate'`)).rows[0];
-    const vatRate = vatSetting?.value ? Number(vatSetting.value) : 0;
 
     const afterDiscount = Math.max(Number(order.subtotal) - Number(order.discount), 0);
-    const vatAmount = Math.round(afterDiscount * vatRate) / 100;
-    const total = Math.max(afterDiscount + vatAmount + Number(order.shipping_fee), 0);
+    const total = Math.max(afterDiscount + Number(order.shipping_fee), 0);
     const paid = Math.min(Number(paidNow) || 0, total);
 
     for (const item of items) {
@@ -256,8 +249,8 @@ export const confirm = asyncHandler(async (req, res) => {
     }
 
     const updated = (await c.query(
-      `UPDATE orders SET status='Mới', vat_rate=$1, vat_amount=$2, total=$3, paid=$4 WHERE id=$5 RETURNING *`,
-      [vatRate, vatAmount, total, paid, order.id]
+      `UPDATE orders SET status='Mới', vat_rate=0, vat_amount=0, total=$1, paid=$2 WHERE id=$3 RETURNING *`,
+      [total, paid, order.id]
     )).rows[0];
     return { order: updated, transaction };
   });
