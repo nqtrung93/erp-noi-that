@@ -22,6 +22,15 @@ export default function ProductPicker({ options, value, onSelect, className, pla
         onFocus={() => setOpen(true)}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && open && filtered.length > 0) {
+            e.preventDefault();
+            const o = filtered[0];
+            onSelect(o);
+            setQuery(o.label);
+            setOpen(false);
+          }
+        }}
         className={className}
       />
       {open && (
