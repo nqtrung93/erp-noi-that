@@ -262,6 +262,11 @@ export async function setOrderStatus(orderId, newStatus, actorId, reason = null)
         WHERE id = $3`,
       [newStatus, deliveryStatus, orderId, reason]
     );
+    // shipments.delivery_status mới là nguồn hiển thị thật ở tab Vận chuyển (xem SHIPMENT_OVERRIDE_COLS)
+    // — phải đồng bộ ở đây, không chỉ orders, nếu không tab Vận chuyển sẽ không thấy "Đã giao".
+    if (newStatus === "Hoàn thành") {
+      await client.query(`UPDATE shipments SET delivery_status = 'Đã giao' WHERE order_id = $1`, [orderId]);
+    }
 
     // Tự tạo phiếu bảo hành (nếu sản phẩm có khai báo bộ phận bảo hành) khi đơn hoàn thành lần đầu.
     if (newStatus === "Hoàn thành" && !(await hasWarrantiesForOrder(client, orderId))) {
