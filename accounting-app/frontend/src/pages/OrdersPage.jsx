@@ -248,12 +248,9 @@ function CreateOrderModal({ products, warehouses, customers, stock, onClose, onS
           <button type="button" onClick={addLine} className="text-indigo-600 text-xs font-medium">+ Thêm dòng</button>
         </div>
 
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div><label className="text-sm text-slate-500">Giảm giá</label>
             <MoneyInput value={discount} onChange={setDiscount} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
-          <div><label className="text-sm text-slate-500">VAT (%)</label>
-            <input type="number" value={vatRate} disabled title="Tỷ lệ VAT cố định — đổi ở mục Cài đặt"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base bg-slate-50 text-slate-500 cursor-not-allowed" /></div>
           <div><label className="text-sm text-slate-500">Phí ship</label>
             <MoneyInput value={shippingFee} onChange={setShippingFee} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
           <div><label className="text-sm text-slate-500">Phương thức</label>
