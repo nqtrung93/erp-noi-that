@@ -5,6 +5,7 @@ import LoginPage from "./pages/LoginPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import CashbookPage from "./pages/CashbookPage.jsx";
 import PartnersPage from "./pages/PartnersPage.jsx";
+import CustomersPage from "./pages/CustomersPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
 import InventoryPage from "./pages/InventoryPage.jsx";
 import OrdersPage from "./pages/OrdersPage.jsx";
@@ -28,6 +29,7 @@ const GROUPS = [
     { id: "orders", label: "Bán hàng", perm: "orders_view", icon: "🛒", el: <OrdersPage /> },
     { id: "purchases", label: "Mua hàng", perm: "purchases_view", icon: "🧾", el: <PurchasesPage /> },
     { id: "inventory", label: "Nhập-Xuất-Tồn", perm: "inventory_view", icon: "📦", el: <InventoryPage /> },
+    { id: "customers", label: "Khách hàng", perm: "partners_view", icon: "👥", el: <CustomersPage /> },
     { id: "partners", label: "Công nợ", perm: "partners_view", icon: "🤝", el: <PartnersPage /> },
   ]},
   { label: "Nhân sự", items: [
