@@ -3,7 +3,7 @@ import { getOrderById } from "./order.service.js";
 import { query } from "../config/db.js";
 import { DEFAULT_TEMPLATES, renderTemplate } from "../utils/printTemplates.js";
 
-const fmt = (n) => Number(n || 0).toLocaleString("vi-VN") + " ₫";
+const fmt = (n) => Number(n || 0).toLocaleString("vi-VN") + "&nbsp;₫";
 
 // Lấy mẫu in hiện hành cho 1 loại phiếu (custom đã lưu ở Cài đặt → Mẫu in, hoặc mặc định).
 export async function getTemplate(type) {

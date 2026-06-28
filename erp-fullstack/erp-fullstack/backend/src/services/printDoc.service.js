@@ -4,7 +4,7 @@ import { getOrderById } from "./order.service.js";
 import { getTemplate, getCompanyHeaderData } from "./invoice.service.js";
 import { renderTemplate } from "../utils/printTemplates.js";
 
-const fmt = (n) => Number(n || 0).toLocaleString("vi-VN") + " ₫";
+const fmt = (n) => Number(n || 0).toLocaleString("vi-VN") + "&nbsp;₫";
 
 const DOC_TITLE = {
   inbound: "PHIẾU NHẬP HÀNG",
