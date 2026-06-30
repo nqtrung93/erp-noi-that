@@ -4,6 +4,7 @@ import * as ordersService from "../services/orders.service.js";
 import * as inventoryService from "../services/inventory.service.js";
 import * as partnersService from "../services/partners.service.js";
 import * as settingsService from "../services/settings.service.js";
+import * as bankService from "../services/bank.service.js";
 import { fmt } from "../utils/format.js";
 import Modal from "../components/Modal.jsx";
 import Toolbar, { ToolbarButton } from "../components/Toolbar.jsx";
@@ -25,6 +26,7 @@ export default function OrdersPage() {
   const [warehouses, setWarehouses] = useState([]);
   const [stock, setStock] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [bankAccounts, setBankAccounts] = useState([]);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [viewingOrder, setViewingOrder] = useState(null);
@@ -43,6 +45,7 @@ export default function OrdersPage() {
     inventoryService.listWarehouses().then(setWarehouses).catch(() => {});
     inventoryService.listStock().then(setStock).catch(() => {});
     partnersService.listPartners().then((ps) => setCustomers(ps.filter((p) => p.type === "customer"))).catch(() => {});
+    bankService.listBankAccounts().then(setBankAccounts).catch(() => {});
   }, []);
 
   function addProduct(p) { setProducts((prev) => [...prev, p]); }
@@ -135,7 +138,7 @@ export default function OrdersPage() {
       </div>
 
       {creating && (
-        <CreateOrderModal products={products} warehouses={warehouses} customers={customers} stock={stock}
+        <CreateOrderModal products={products} warehouses={warehouses} customers={customers} stock={stock} bankAccounts={bankAccounts}
           onProductCreated={addProduct}
           onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }} />
       )}
@@ -148,16 +151,16 @@ export default function OrdersPage() {
           onClose={() => setEditingOrder(null)} onSaved={() => { setEditingOrder(null); reload(); }} />
       )}
       {confirmingOrder && (
-        <ConfirmOrderModal order={confirmingOrder} onClose={() => setConfirmingOrder(null)} onSaved={() => { setConfirmingOrder(null); reload(); }} />
+        <ConfirmOrderModal order={confirmingOrder} bankAccounts={bankAccounts} onClose={() => setConfirmingOrder(null)} onSaved={() => { setConfirmingOrder(null); reload(); }} />
       )}
       {paying && (
-        <PayOrderModal order={paying} onClose={() => setPaying(null)} onSaved={() => { setPaying(null); reload(); }} />
+        <PayOrderModal order={paying} bankAccounts={bankAccounts} onClose={() => setPaying(null)} onSaved={() => { setPaying(null); reload(); }} />
       )}
     </div>
   );
 }
 
-function CreateOrderModal({ products, warehouses, customers, stock, onProductCreated, onClose, onSaved }) {
+function CreateOrderModal({ products, warehouses, customers, stock, bankAccounts, onProductCreated, onClose, onSaved }) {
   const [customerId, setCustomerId] = useState("");
   const [addingNewCustomer, setAddingNewCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
@@ -167,6 +170,7 @@ function CreateOrderModal({ products, warehouses, customers, stock, onProductCre
   const [items, setItems] = useState([{ productId: "", variantId: "", qty: 1, price: 0 }]);
   const [paidNow, setPaidNow] = useState("");
   const [method, setMethod] = useState("Tiền mặt");
+  const [bankAccountId, setBankAccountId] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -215,7 +219,9 @@ function CreateOrderModal({ products, warehouses, customers, stock, onProductCre
         warehouseId,
         items: items.map((it) => ({ productId: it.productId, variantId: it.variantId || null, qty: Number(it.qty), price: Number(it.price) })),
         discount: 0, shippingFee: 0,
-        paidNow: Number(paidNow) || 0, method, note: note || null, isDraft,
+        paidNow: Number(paidNow) || 0, method,
+        bankAccountId: method === "Chuyển khoản" ? (bankAccountId || null) : null,
+        note: note || null, isDraft,
       });
       onSaved();
     } catch (e2) { setError(e2.message); } finally { setSaving(false); }
@@ -290,6 +296,13 @@ function CreateOrderModal({ products, warehouses, customers, stock, onProductCre
           <div><label className="text-sm text-slate-500">Thanh toán ngay</label>
             <MoneyInput value={paidNow} onChange={setPaidNow} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
         </div>
+        {method === "Chuyển khoản" && (
+          <div><label className="text-sm text-slate-500">Tài khoản ngân hàng</label>
+            <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base">
+              <option value="">— Không chọn —</option>
+              {bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select></div>
+        )}
 
         <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
           <div className="font-semibold text-lg">Tổng cộng: {fmt(total)}</div>
@@ -416,9 +429,10 @@ function EditOrderModal({ order, products, stock, onProductCreated, onClose, onS
 }
 
 // Xác nhận đơn Nháp: nhập số tiền thu ngay (nếu có) rồi áp dụng trừ tồn kho + tính VAT.
-function ConfirmOrderModal({ order, onClose, onSaved }) {
+function ConfirmOrderModal({ order, bankAccounts, onClose, onSaved }) {
   const [paidNow, setPaidNow] = useState("");
   const [method, setMethod] = useState("Tiền mặt");
+  const [bankAccountId, setBankAccountId] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -426,7 +440,10 @@ function ConfirmOrderModal({ order, onClose, onSaved }) {
     e.preventDefault();
     setSaving(true);
     try {
-      await ordersService.confirmOrder(order.id, { paidNow: Number(paidNow) || 0, method });
+      await ordersService.confirmOrder(order.id, {
+        paidNow: Number(paidNow) || 0, method,
+        bankAccountId: method === "Chuyển khoản" ? (bankAccountId || null) : null,
+      });
       onSaved();
     } catch (e2) { setError(e2.message); } finally { setSaving(false); }
   }
@@ -435,13 +452,20 @@ function ConfirmOrderModal({ order, onClose, onSaved }) {
     <Modal title={`Xác nhận đơn — ${order.code}`} onClose={onClose} size="lg">
       <form onSubmit={submit} className="space-y-3">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
-        <p className="text-sm text-slate-500">Xác nhận sẽ trừ tồn kho theo các dòng đã lưu và tính VAT hiện hành. Tạm tính: <span className="font-semibold text-slate-700">{fmt(order.total)}</span> (chưa gồm VAT).</p>
+        <p className="text-sm text-slate-500">Xác nhận sẽ trừ tồn kho theo các dòng đã lưu. Tạm tính: <span className="font-semibold text-slate-700">{fmt(order.total)}</span>.</p>
         <div><label className="text-xs text-slate-500">Thu tiền ngay (tuỳ chọn)</label>
           <MoneyInput value={paidNow} onChange={setPaidNow} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
         <div><label className="text-xs text-slate-500">Phương thức</label>
           <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
             <option>Tiền mặt</option><option>Chuyển khoản</option>
           </select></div>
+        {method === "Chuyển khoản" && (
+          <div><label className="text-xs text-slate-500">Tài khoản ngân hàng</label>
+            <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              <option value="">— Không chọn —</option>
+              {bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select></div>
+        )}
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Hủy</button>
           <button type="submit" disabled={saving} className="bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">{saving ? "Đang xử lý…" : "Xác nhận đơn"}</button>
@@ -514,10 +538,11 @@ function ViewOrderModal({ order, onClose }) {
   );
 }
 
-function PayOrderModal({ order, onClose, onSaved }) {
+function PayOrderModal({ order, bankAccounts, onClose, onSaved }) {
   const remaining = Number(order.total) - Number(order.paid);
   const [amount, setAmount] = useState(remaining);
   const [method, setMethod] = useState("Tiền mặt");
+  const [bankAccountId, setBankAccountId] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -526,7 +551,10 @@ function PayOrderModal({ order, onClose, onSaved }) {
     if (!amount || Number(amount) <= 0) return setError("Số tiền không hợp lệ");
     setSaving(true);
     try {
-      await ordersService.addOrderPayment(order.id, { amount: Number(amount), method });
+      await ordersService.addOrderPayment(order.id, {
+        amount: Number(amount), method,
+        bankAccountId: method === "Chuyển khoản" ? (bankAccountId || null) : null,
+      });
       onSaved();
     } catch (e2) { setError(e2.message); } finally { setSaving(false); }
   }
@@ -542,6 +570,13 @@ function PayOrderModal({ order, onClose, onSaved }) {
           <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
             <option>Tiền mặt</option><option>Chuyển khoản</option>
           </select></div>
+        {method === "Chuyển khoản" && (
+          <div><label className="text-xs text-slate-500">Tài khoản ngân hàng</label>
+            <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              <option value="">— Không chọn —</option>
+              {bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select></div>
+        )}
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Hủy</button>
           <button type="submit" disabled={saving} className="bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">{saving ? "Đang lưu…" : "Xác nhận"}</button>

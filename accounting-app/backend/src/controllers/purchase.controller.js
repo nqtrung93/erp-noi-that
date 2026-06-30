@@ -54,7 +54,7 @@ async function buildLineRows(c, items) {
 // VAT KHÔNG nhận từ client — luôn lấy tỷ lệ cố định ở Cài đặt.
 // isDraft=true: lưu nháp — KHÔNG tăng tồn kho, KHÔNG tạo phiếu chi, KHÔNG ghi công nợ.
 export const create = asyncHandler(async (req, res) => {
-  const { supplierId, newSupplier, warehouseId, items, discount, shippingFee, paidNow, method, note, isDraft } = req.body || {};
+  const { supplierId, newSupplier, warehouseId, items, discount, shippingFee, paidNow, method, bankAccountId, note, isDraft } = req.body || {};
   if (!warehouseId) throw badRequest("Thiếu kho nhập hàng");
   if (!Array.isArray(items) || !items.length) throw badRequest("Đơn mua cần ít nhất 1 sản phẩm");
 
@@ -113,9 +113,9 @@ export const create = asyncHandler(async (req, res) => {
     if (!isDraft && paid > 0) {
       const txCode = await nextDocNo(c, "transaction");
       transaction = (await c.query(
-        `INSERT INTO transactions(code, type, category_name, amount, method, partner_id, partner_name, note, created_by)
-         VALUES($1,'Chi','Mua hàng',$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [txCode, paid, method || null, resolvedSupplierId, supplier?.name || null, `Thanh toán đơn mua ${code}`, req.user.sub]
+        `INSERT INTO transactions(code, type, category_name, amount, method, bank_account_id, partner_id, partner_name, note, created_by)
+         VALUES($1,'Chi','Mua hàng',$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [txCode, paid, method || null, method === "Chuyển khoản" ? (bankAccountId || null) : null, resolvedSupplierId, supplier?.name || null, `Thanh toán đơn mua ${code}`, req.user.sub]
       )).rows[0];
     }
 
@@ -204,7 +204,7 @@ export const update = asyncHandler(async (req, res) => {
 // POST /api/purchases/:id/confirm { paidNow, method } — xác nhận đơn Nháp: tăng tồn kho, cập nhật
 // giá vốn, tạo phiếu chi (nếu có trả tiền) + ghi công nợ phần còn lại. VAT không còn được áp dụng.
 export const confirm = asyncHandler(async (req, res) => {
-  const { paidNow, method } = req.body || {};
+  const { paidNow, method, bankAccountId } = req.body || {};
 
   const result = await withTransaction(async (c) => {
     const po = (await c.query(`SELECT * FROM purchase_orders WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
@@ -234,9 +234,9 @@ export const confirm = asyncHandler(async (req, res) => {
     if (paid > 0) {
       const txCode = await nextDocNo(c, "transaction");
       transaction = (await c.query(
-        `INSERT INTO transactions(code, type, category_name, amount, method, partner_id, partner_name, note, created_by)
-         VALUES($1,'Chi','Mua hàng',$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [txCode, paid, method || null, po.supplier_id, po.supplier_name, `Thanh toán đơn mua ${po.code}`, req.user.sub]
+        `INSERT INTO transactions(code, type, category_name, amount, method, bank_account_id, partner_id, partner_name, note, created_by)
+         VALUES($1,'Chi','Mua hàng',$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [txCode, paid, method || null, method === "Chuyển khoản" ? (bankAccountId || null) : null, po.supplier_id, po.supplier_name, `Thanh toán đơn mua ${po.code}`, req.user.sub]
       )).rows[0];
     }
 
@@ -306,7 +306,7 @@ export const changeStatus = asyncHandler(async (req, res) => {
 
 // POST /api/purchases/:id/payments { amount, method } — trả thêm tiền cho đơn mua còn nợ
 export const addPayment = asyncHandler(async (req, res) => {
-  const { amount, method } = req.body || {};
+  const { amount, method, bankAccountId } = req.body || {};
   if (!amount || Number(amount) <= 0) throw badRequest("Số tiền không hợp lệ");
 
   const result = await withTransaction(async (c) => {
@@ -318,9 +318,9 @@ export const addPayment = asyncHandler(async (req, res) => {
 
     const txCode = await nextDocNo(c, "transaction");
     const tx = (await c.query(
-      `INSERT INTO transactions(code, type, category_name, amount, method, partner_id, partner_name, note, created_by)
-       VALUES($1,'Chi','Mua hàng',$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [txCode, amt, method || null, po.supplier_id, po.supplier_name, `Thanh toán đơn mua ${po.code}`, req.user.sub]
+      `INSERT INTO transactions(code, type, category_name, amount, method, bank_account_id, partner_id, partner_name, note, created_by)
+       VALUES($1,'Chi','Mua hàng',$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [txCode, amt, method || null, method === "Chuyển khoản" ? (bankAccountId || null) : null, po.supplier_id, po.supplier_name, `Thanh toán đơn mua ${po.code}`, req.user.sub]
     )).rows[0];
 
     if (po.supplier_id) {

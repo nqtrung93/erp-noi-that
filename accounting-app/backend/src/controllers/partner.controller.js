@@ -24,7 +24,7 @@ export const create = asyncHandler(async (req, res) => {
 // direction=increase: ghi nợ thuần (không có dòng tiền) — vd bán/nhập hàng cho ghi nợ.
 // direction=decrease: thu nợ (customer) hoặc trả nợ (supplier) — LUÔN tạo kèm 1 phiếu thu/chi tiền mặt thực tế.
 export const adjustDebt = asyncHandler(async (req, res) => {
-  const { amount, direction, note, method } = req.body || {};
+  const { amount, direction, note, method, bankAccountId } = req.body || {};
   if (!amount || Number(amount) <= 0) throw badRequest("Số tiền không hợp lệ");
   if (!["increase", "decrease"].includes(direction)) throw badRequest("Hướng điều chỉnh không hợp lệ");
 
@@ -51,10 +51,10 @@ export const adjustDebt = asyncHandler(async (req, res) => {
       const txType = partner.type === "supplier" ? "Chi" : "Thu";
       const txCode = await nextDocNo(c, "transaction");
       transaction = (await c.query(
-        `INSERT INTO transactions(code, type, category_name, amount, partner_id, partner_name, note, created_by)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        `INSERT INTO transactions(code, type, category_name, amount, method, bank_account_id, partner_id, partner_name, note, created_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
         [txCode, txType, partner.type === "supplier" ? "Trả nợ nhà cung cấp" : "Thu nợ khách hàng",
-          Number(amount), partner.id, partner.name, note || null, req.user.sub]
+          Number(amount), method || null, method === "Chuyển khoản" ? (bankAccountId || null) : null, partner.id, partner.name, note || null, req.user.sub]
       )).rows[0];
     }
 

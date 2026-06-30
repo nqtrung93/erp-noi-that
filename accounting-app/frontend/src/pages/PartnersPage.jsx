@@ -3,6 +3,7 @@ import { useAuth } from "../store/auth.store.jsx";
 import * as partnersService from "../services/partners.service.js";
 import * as ordersService from "../services/orders.service.js";
 import * as purchasesService from "../services/purchases.service.js";
+import * as bankService from "../services/bank.service.js";
 import { fmt } from "../utils/format.js";
 import Modal from "../components/Modal.jsx";
 import Toolbar, { ToolbarButton } from "../components/Toolbar.jsx";
@@ -344,11 +345,16 @@ function CreatePartnerModal({ onClose, onSaved }) {
 function DebtModal({ partner, onClose, onSaved }) {
   const [direction, setDirection] = useState("decrease");
   const [amount, setAmount] = useState(Number(partner.debt) > 0 ? String(partner.debt) : "");
+  const [method, setMethod] = useState("Tiền mặt");
+  const [bankAccountId, setBankAccountId] = useState("");
+  const [bankAccounts, setBankAccounts] = useState([]);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   const decreaseLabel = partner.type === "supplier" ? "Trả nợ (tạo phiếu Chi)" : "Thu nợ (tạo phiếu Thu)";
+
+  useEffect(() => { bankService.listBankAccounts().then(setBankAccounts).catch(() => {}); }, []);
 
   async function submit(e) {
     e.preventDefault();
@@ -356,7 +362,11 @@ function DebtModal({ partner, onClose, onSaved }) {
     if (!amount || Number(amount) <= 0) return setError("Số tiền không hợp lệ");
     setSaving(true);
     try {
-      await partnersService.adjustDebt(partner.id, { amount: Number(amount), direction, note: note || null });
+      await partnersService.adjustDebt(partner.id, {
+        amount: Number(amount), direction, note: note || null,
+        method: direction === "decrease" ? method : null,
+        bankAccountId: direction === "decrease" && method === "Chuyển khoản" ? (bankAccountId || null) : null,
+      });
       onSaved();
     } catch (e2) {
       setError(e2.message);
@@ -383,6 +393,27 @@ function DebtModal({ partner, onClose, onSaved }) {
           <MoneyInput value={amount} onChange={setAmount}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </div>
+        {direction === "decrease" && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500">Phương thức</label>
+              <select value={method} onChange={(e) => setMethod(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+                <option>Tiền mặt</option><option>Chuyển khoản</option>
+              </select>
+            </div>
+            {method === "Chuyển khoản" && (
+              <div>
+                <label className="text-xs text-slate-500">Tài khoản ngân hàng</label>
+                <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+                  <option value="">— Không chọn —</option>
+                  {bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
         <div>
           <label className="text-xs text-slate-500">Ghi chú</label>
           <input value={note} onChange={(e) => setNote(e.target.value)}
