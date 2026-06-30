@@ -336,7 +336,7 @@ export const invoice = asyncHandler(async (req, res) => {
   const order = (await query(`SELECT * FROM orders WHERE id = $1`, [req.params.id])).rows[0];
   if (!order) throw notFound();
   const items = (await query(
-    `SELECT oi.*, p.name AS product_name, p.unit, v.attrs AS variant_attrs
+    `SELECT oi.*, p.name AS product_name, p.sku, p.unit, v.attrs AS variant_attrs, v.sku AS variant_sku
        FROM order_items oi JOIN products p ON p.id = oi.product_id
        LEFT JOIN product_variants v ON v.id = oi.variant_id
        WHERE oi.order_id = $1`,

@@ -172,7 +172,7 @@ function WarehouseModal({ warehouse, onClose, onSaved }) {
 }
 
 function CompanyInfoManager() {
-  const [form, setForm] = useState({ name: "", address: "", phone: "", email: "" });
+  const [form, setForm] = useState({ name: "", address: "", phone: "", email: "", taxId: "" });
   const [vatRate, setVatRate] = useState("0");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -228,6 +228,11 @@ function CompanyInfoManager() {
         </div>
       </div>
       <div>
+        <label className="text-xs text-slate-500">Mã số thuế</label>
+        <input value={form.taxId || ""} onChange={(e) => setForm({ ...form, taxId: e.target.value })}
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+      </div>
+      <div>
         <label className="text-xs text-slate-500">Tỷ lệ VAT mặc định (%)</label>
         <input type="number" min="0" max="100" step="0.5" value={vatRate} onChange={(e) => setVatRate(e.target.value)}
           className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
@@ -241,7 +246,7 @@ function CompanyInfoManager() {
   );
 }
 
-const PLACEHOLDER_HINT = "{{companyName}} {{companyAddress}} {{companyPhone}} {{code}} {{date}} {{customerName}} {{rowsHtml}} {{subtotal}} {{discount}} {{vatRate}} {{vatAmount}} {{shippingFee}} {{total}} {{paid}} {{due}}";
+const PLACEHOLDER_HINT = "{{companyName}} {{companyAddress}} {{companyPhone}} {{companyEmail}} {{companyTaxId}} {{code}} {{day}} {{month}} {{year}} {{date}} {{customerName}} {{customerPhone}} {{customerAddress}} {{dienGiai}} {{rowsHtml}} {{subtotal}} {{discount}} {{shippingFee}} {{total}} {{paid}} {{due}} {{amountWords}}";
 
 function TemplatesManager() {
   const [html, setHtml] = useState("");
