@@ -295,11 +295,22 @@ function PurchaseTab({ from, to }) {
 function DebtTab() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [directionFilter, setDirectionFilter] = useState("");
+  const [search, setSearch] = useState("");
 
-  useEffect(() => { reportsService.getDebtReport().then(setData).catch((e) => setError(e.message)); }, []);
+  useEffect(() => {
+    reportsService.getDebtReport(typeFilter || undefined).then(setData).catch((e) => setError(e.message));
+  }, [typeFilter]);
 
   if (error) return <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>;
   if (!data) return <p className="text-slate-400 text-sm">Đang tải…</p>;
+
+  const filtered = data.rows
+    .filter((d) => !directionFilter || (directionFilter === "receivable" ? Number(d.debt) > 0 : Number(d.debt) < 0))
+    .filter((d) => !search ||
+      d.name.toLowerCase().includes(search.toLowerCase()) ||
+      d.code.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="space-y-4">
@@ -307,6 +318,34 @@ function DebtTab() {
         <Stat label="Tổng phải thu (khách nợ)" value={fmt(data.totalReceivable)} color="text-red-500" />
         <Stat label="Tổng phải trả (mình nợ)" value={fmt(data.totalPayable)} color="text-amber-600" />
       </div>
+
+      <div className="flex flex-wrap gap-3 items-end">
+        <div>
+          <label className="text-xs text-slate-500">Loại đối tượng</label>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm block min-w-[160px]">
+            <option value="">— Tất cả —</option>
+            <option value="customer">Khách hàng</option>
+            <option value="supplier">Nhà cung cấp</option>
+            <option value="other">Khác</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-slate-500">Chiều công nợ</label>
+          <select value={directionFilter} onChange={(e) => setDirectionFilter(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm block min-w-[160px]">
+            <option value="">— Tất cả —</option>
+            <option value="receivable">Phải thu (họ nợ mình)</option>
+            <option value="payable">Phải trả (mình nợ họ)</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-slate-500">Tìm theo tên hoặc mã</label>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tên hoặc mã…"
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm block min-w-[200px]" />
+        </div>
+      </div>
+
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
         <h3 className="font-semibold text-slate-700 mb-2">Chi tiết công nợ</h3>
         <table className="w-full text-sm">
@@ -319,7 +358,7 @@ function DebtTab() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {data.rows.map((d) => (
+            {filtered.map((d) => (
               <tr key={d.id}>
                 <td className="py-2">{d.code}</td>
                 <td className="py-2">{d.name}</td>
@@ -329,7 +368,7 @@ function DebtTab() {
             ))}
           </tbody>
         </table>
-        {data.rows.length === 0 && <p className="text-slate-400 text-sm py-2">Không có công nợ tồn đọng.</p>}
+        {filtered.length === 0 && <p className="text-slate-400 text-sm py-2">Không có công nợ phù hợp.</p>}
       </div>
     </div>
   );
