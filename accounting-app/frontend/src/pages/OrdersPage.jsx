@@ -266,6 +266,7 @@ function CreateOrderModal({ products, warehouses, customers, stock, onProductCre
           <label className="text-xs text-slate-500">Sản phẩm</label>
           {items.map((it, idx) => (
             <div key={idx} className="flex gap-2 items-center flex-wrap">
+              <span className="text-xs text-slate-400 w-5 flex-none text-right">{idx + 1}</span>
               <ProductLinePicker products={products} stock={stock} warehouseId={warehouseId}
                 productId={it.productId} variantId={it.variantId} onProductCreated={onProductCreated}
                 onChangeProduct={(v) => updateItem(idx, "productId", v)} onChangeVariant={(v) => updateItem(idx, "variantId", v)} />
@@ -389,6 +390,7 @@ function EditOrderModal({ order, products, stock, onProductCreated, onClose, onS
             <label className="text-xs text-slate-500">Sản phẩm</label>
             {items.map((it, idx) => (
               <div key={idx} className="flex gap-2 items-center flex-wrap">
+                <span className="text-xs text-slate-400 w-5 flex-none text-right">{idx + 1}</span>
                 <ProductLinePicker products={products} stock={stock} warehouseId={order.warehouse_id}
                   productId={it.productId} variantId={it.variantId} onProductCreated={onProductCreated}
                   onChangeProduct={(v) => updateItem(idx, "productId", v)} onChangeVariant={(v) => updateItem(idx, "variantId", v)} />
@@ -498,13 +500,15 @@ function ViewOrderModal({ order, onClose }) {
           <div>
             <table className="w-full text-sm">
               <thead><tr className="text-left text-slate-400 text-xs border-b border-slate-100">
-                <th className="py-1.5">Sản phẩm</th><th className="py-1.5 text-right">SL</th>
+                <th className="py-1.5 w-8">STT</th><th className="py-1.5">Sản phẩm</th><th className="py-1.5">ĐVT</th><th className="py-1.5 text-right">SL</th>
                 <th className="py-1.5 text-right">Giá</th><th className="py-1.5 text-right">Thành tiền</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
-                {full.items.map((it) => (
+                {full.items.map((it, idx) => (
                   <tr key={it.id}>
+                    <td className="py-1.5 text-slate-400">{idx + 1}</td>
                     <td className="py-1.5">{it.product_name}{it.variant_attrs ? <span className="text-slate-400"> ({Object.values(it.variant_attrs).join(" / ")})</span> : ""}</td>
+                    <td className="py-1.5 text-slate-500">{it.unit}</td>
                     <td className="py-1.5 text-right">{it.qty}</td>
                     <td className="py-1.5 text-right">{fmt(it.price)}</td>
                     <td className="py-1.5 text-right font-medium">{fmt(it.qty * it.price)}</td>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../store/auth.store.jsx";
 import * as partnersService from "../services/partners.service.js";
+import * as ordersService from "../services/orders.service.js";
+import * as purchasesService from "../services/purchases.service.js";
 import { fmt } from "../utils/format.js";
 import Modal from "../components/Modal.jsx";
 import Toolbar, { ToolbarButton } from "../components/Toolbar.jsx";
@@ -8,6 +10,12 @@ import MoneyInput from "../components/MoneyInput.jsx";
 import { readCsvFile } from "../utils/importCsv.js";
 
 const TYPE_LABEL = { customer: "Khách hàng", supplier: "Nhà cung cấp", other: "Khác" };
+const DOC_STATUS_COLOR = {
+  "Nháp": "bg-slate-100 text-slate-600",
+  "Mới": "bg-amber-100 text-amber-700",
+  "Hoàn thành": "bg-emerald-100 text-emerald-700",
+  "Đã hủy": "bg-red-100 text-red-700",
+};
 
 export default function PartnersPage() {
   const { can } = useAuth();
@@ -17,6 +25,7 @@ export default function PartnersPage() {
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [debtTarget, setDebtTarget] = useState(null);
+  const [viewing, setViewing] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
 
@@ -131,11 +140,14 @@ export default function PartnersPage() {
             {filtered.map((p) => (
               <tr key={p.id}>
                 <td className="py-2 px-3 font-medium whitespace-nowrap">{p.code}</td>
-                <td className="py-2 px-3">{p.name}</td>
+                <td className="py-2 px-3">
+                  <button onClick={() => setViewing(p)} className="text-indigo-600 hover:underline font-medium">{p.name}</button>
+                </td>
                 <td className="py-2 px-3 text-slate-500">{TYPE_LABEL[p.type]}</td>
                 <td className="py-2 px-3 text-slate-500">{p.phone || "—"}</td>
                 <td className="py-2 px-3 text-right font-medium">{fmt(p.debt)}</td>
                 <td className="py-2 px-3 flex gap-2 justify-end">
+                  <button onClick={() => setViewing(p)} className="text-slate-600 text-xs hover:underline">Xem</button>
                   {can("partners_edit") && (
                     <button onClick={() => setDebtTarget(p)} className="text-indigo-600 text-xs hover:underline">Ghi/thu nợ</button>
                   )}
@@ -152,7 +164,110 @@ export default function PartnersPage() {
 
       {creating && <CreatePartnerModal onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }} />}
       {debtTarget && <DebtModal partner={debtTarget} onClose={() => setDebtTarget(null)} onSaved={() => { setDebtTarget(null); reload(); }} />}
+      {viewing && <PartnerDetailModal partner={viewing} onClose={() => setViewing(null)} />}
     </div>
+  );
+}
+
+// Chi tiết đối tác (chỉ đọc): thông tin + lịch sử đơn (mua nếu là NCC, bán nếu là KH) + lịch sử công nợ.
+function PartnerDetailModal({ partner, onClose }) {
+  const isSupplier = partner.type === "supplier";
+  const [tab, setTab] = useState("docs");
+  const [docs, setDocs] = useState(null);
+  const [debtEntries, setDebtEntries] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchDocs = isSupplier ? purchasesService.listPurchases() : ordersService.listOrders();
+    fetchDocs
+      .then((all) => setDocs(all.filter((o) => String(isSupplier ? o.supplier_id : o.customer_id) === String(partner.id))))
+      .catch((e) => setError(e.message));
+    partnersService.debtHistory(partner.id).then(setDebtEntries).catch((e) => setError(e.message));
+  }, [partner.id, isSupplier]);
+
+  const totalDocs = (docs || []).length;
+  const totalValue = (docs || []).reduce((s, o) => s + Number(o.total), 0);
+
+  return (
+    <Modal title={`${TYPE_LABEL[partner.type]} — ${partner.name}`} onClose={onClose} size="xl">
+      {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2 mb-3">{error}</div>}
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <div><span className="text-slate-400">Mã</span><div className="font-medium">{partner.code}</div></div>
+          <div><span className="text-slate-400">Điện thoại</span><div className="font-medium">{partner.phone || "—"}</div></div>
+          <div><span className="text-slate-400">Địa chỉ</span><div className="font-medium">{partner.address || "—"}</div></div>
+          <div><span className="text-slate-400">Công nợ hiện tại</span><div className="font-semibold text-red-500">{fmt(partner.debt)}</div></div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-slate-50 rounded-xl px-4 py-2 text-sm">Số đơn {isSupplier ? "đã mua" : "đã bán"}: <span className="font-semibold">{totalDocs}</span></div>
+          <div className="bg-slate-50 rounded-xl px-4 py-2 text-sm">Tổng giá trị: <span className="font-semibold">{fmt(totalValue)}</span></div>
+        </div>
+
+        <div className="flex gap-1 border-b border-slate-100">
+          {[["docs", isSupplier ? "Lịch sử mua hàng" : "Lịch sử bán hàng"], ["debt", "Lịch sử công nợ"]].map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)}
+              className={`px-3 py-1.5 text-sm font-medium ${tab === id ? "text-indigo-600 border-b-2 border-indigo-600" : "text-slate-400"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "docs" && (
+          docs === null ? <p className="text-sm text-slate-400 py-6 text-center">Đang tải…</p> : (
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-slate-400 text-xs border-b border-slate-100">
+                <th className="py-1.5">Mã đơn</th><th className="py-1.5 text-right">Tổng tiền</th>
+                <th className="py-1.5 text-right">{isSupplier ? "Đã trả" : "Đã thu"}</th><th className="py-1.5">Trạng thái</th><th className="py-1.5">Ngày</th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-50">
+                {docs.map((o) => (
+                  <tr key={o.id}>
+                    <td className="py-1.5 font-medium">{o.code}</td>
+                    <td className="py-1.5 text-right">{fmt(o.total)}</td>
+                    <td className="py-1.5 text-right text-emerald-600">{fmt(o.paid)}</td>
+                    <td className="py-1.5"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${DOC_STATUS_COLOR[o.status]}`}>{o.status}</span></td>
+                    <td className="py-1.5 text-slate-400 whitespace-nowrap">{new Date(o.created_at).toLocaleDateString("vi-VN")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        )}
+        {tab === "docs" && docs?.length === 0 && <p className="text-slate-400 text-sm py-4 text-center">Chưa có đơn nào.</p>}
+
+        {tab === "debt" && (
+          debtEntries === null ? <p className="text-sm text-slate-400 py-6 text-center">Đang tải…</p> : (
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-slate-400 text-xs border-b border-slate-100">
+                <th className="py-1.5">Mã phiếu</th><th className="py-1.5">Loại</th>
+                <th className="py-1.5 text-right">Số tiền</th><th className="py-1.5">Ghi chú</th><th className="py-1.5">Ngày</th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-50">
+                {debtEntries.map((d) => (
+                  <tr key={d.id}>
+                    <td className="py-1.5 font-medium">{d.code}</td>
+                    <td className="py-1.5">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${d.direction === "increase" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                        {d.direction === "increase" ? "Ghi tăng nợ" : "Giảm nợ"}
+                      </span>
+                    </td>
+                    <td className="py-1.5 text-right">{fmt(d.amount)}</td>
+                    <td className="py-1.5 text-slate-500">{d.note || "—"}</td>
+                    <td className="py-1.5 text-slate-400 whitespace-nowrap">{new Date(d.created_at).toLocaleDateString("vi-VN")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        )}
+        {tab === "debt" && debtEntries?.length === 0 && <p className="text-slate-400 text-sm py-4 text-center">Chưa có biến động công nợ.</p>}
+
+        <div className="flex justify-end pt-2 border-t border-slate-100">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Đóng</button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

@@ -3,19 +3,27 @@ import { query } from "../config/db.js";
 export const DEFAULT_INVOICE_TEMPLATE = `
 <html><head><meta charset="utf-8"><title>Hoá đơn {{code}}</title></head>
 <body style="font-family: sans-serif; padding: 24px;">
-  <h2>{{companyName}}</h2>
-  <p style="color:#666; margin-top:-8px;">{{companyAddress}} {{companyPhone}}</p>
   <h3>HOÁ ĐƠN BÁN HÀNG — {{code}}</h3>
-  <p>Khách hàng: {{customerName}}</p>
   <p>Ngày: {{date}}</p>
+  <table style="width:100%; border-collapse: collapse; margin-bottom:12px;">
+    <tr>
+      <td style="vertical-align:top; width:50%;">
+        <strong>Bên bán:</strong> {{companyName}}<br/>
+        {{companyAddress}} {{companyPhone}}
+      </td>
+      <td style="vertical-align:top;">
+        <strong>Bên mua:</strong> {{customerName}}<br/>
+        {{customerPhone}} {{customerAddress}}
+      </td>
+    </tr>
+  </table>
   <table style="width:100%; border-collapse: collapse;" border="1" cellpadding="6">
-    <thead><tr><th>Sản phẩm</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
+    <thead><tr><th>STT</th><th>Sản phẩm</th><th>ĐVT</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
     <tbody>{{rowsHtml}}</tbody>
   </table>
   <p style="text-align:right; margin-top:12px;">
     Tạm tính: {{subtotal}} đ<br/>
     Giảm giá: {{discount}} đ<br/>
-    VAT ({{vatRate}}%): {{vatAmount}} đ<br/>
     Phí ship: {{shippingFee}} đ<br/>
     <strong>Tổng cộng: {{total}} đ</strong><br/>
     Đã thanh toán: {{paid}} đ<br/>
@@ -35,9 +43,16 @@ export async function renderInvoiceHtml(order, items) {
   const tplRow = (await query(`SELECT value FROM app_settings WHERE key = 'tpl_invoice'`)).rows[0];
   const template = tplRow?.value || DEFAULT_INVOICE_TEMPLATE;
 
-  const rowsHtml = items.map((it) => `
+  let customer = {};
+  if (order.customer_id) {
+    customer = (await query(`SELECT phone, address FROM partners WHERE id = $1`, [order.customer_id])).rows[0] || {};
+  }
+
+  const rowsHtml = items.map((it, idx) => `
     <tr>
+      <td style="text-align:right">${idx + 1}</td>
       <td>${it.product_name}${escapeAttrs(it.variant_attrs)}</td>
+      <td>${it.unit || ""}</td>
       <td style="text-align:right">${it.qty}</td>
       <td style="text-align:right">${Number(it.price).toLocaleString("vi-VN")}</td>
       <td style="text-align:right">${(Number(it.qty) * Number(it.price)).toLocaleString("vi-VN")}</td>
@@ -48,11 +63,11 @@ export async function renderInvoiceHtml(order, items) {
     code: order.code,
     date: new Date(order.created_at).toLocaleString("vi-VN"),
     customerName: order.customer_name || "Khách lẻ",
+    customerPhone: customer.phone || "",
+    customerAddress: customer.address || "",
     rowsHtml,
     subtotal: Number(order.subtotal).toLocaleString("vi-VN"),
     discount: Number(order.discount).toLocaleString("vi-VN"),
-    vatRate: Number(order.vat_rate || 0),
-    vatAmount: Number(order.vat_amount || 0).toLocaleString("vi-VN"),
     shippingFee: Number(order.shipping_fee || 0).toLocaleString("vi-VN"),
     total: Number(order.total).toLocaleString("vi-VN"),
     paid: Number(order.paid).toLocaleString("vi-VN"),

@@ -54,6 +54,9 @@ export default function ProductLinePicker({ products, stock, warehouseId, produc
       {product && (!product.has_variants || variantId) && (
         <span className="text-xs text-slate-400 whitespace-nowrap">Tồn: {stockQty(product.id, variantId)}</span>
       )}
+      {product && (
+        <span className="text-xs text-slate-400 whitespace-nowrap w-14 flex-none">{product.unit}</span>
+      )}
       <button type="button" onClick={() => setCreating(true)} title="Tạo sản phẩm mới"
         className="text-xs text-indigo-600 font-medium whitespace-nowrap">+ Mới</button>
       {creating && (

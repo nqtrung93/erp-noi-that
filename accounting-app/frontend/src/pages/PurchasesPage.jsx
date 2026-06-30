@@ -158,6 +158,10 @@ export default function PurchasesPage() {
 
 function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProductCreated, onClose, onSaved }) {
   const [supplierId, setSupplierId] = useState("");
+  const [addingNewSupplier, setAddingNewSupplier] = useState(false);
+  const [newSupplierName, setNewSupplierName] = useState("");
+  const [newSupplierPhone, setNewSupplierPhone] = useState("");
+  const [newSupplierAddress, setNewSupplierAddress] = useState("");
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id || "");
   const [items, setItems] = useState([{ productId: "", variantId: "", qty: 1, price: 0 }]);
   const [discount, setDiscount] = useState("");
@@ -204,10 +208,13 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProduct
     if (items.some((it) => products.find((p) => String(p.id) === String(it.productId))?.has_variants && !it.variantId)) {
       return setError("Vui lòng chọn biến thể cho các sản phẩm có biến thể");
     }
+    if (addingNewSupplier && !newSupplierName.trim()) return setError("Thiếu tên nhà cung cấp mới");
     setSaving(true);
     try {
       await purchasesService.createPurchase({
-        supplierId: supplierId || null, warehouseId,
+        supplierId: addingNewSupplier ? null : (supplierId || null),
+        newSupplier: addingNewSupplier ? { name: newSupplierName, phone: newSupplierPhone || null, address: newSupplierAddress || null } : null,
+        warehouseId,
         items: items.map((it) => ({ productId: it.productId, variantId: it.variantId || null, qty: Number(it.qty), price: Number(it.price) })),
         discount: Number(discount) || 0, shippingFee: Number(shippingFee) || 0,
         paidNow: Number(paidNow) || 0, method, note: note || null, isDraft,
@@ -221,20 +228,44 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProduct
       <form onSubmit={(e) => submit(e, false)} className="space-y-4 text-base">
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
         <div className="grid grid-cols-2 gap-4">
-          <div><label className="text-sm text-slate-500">Nhà cung cấp</label>
-            <SearchSelect options={suppliers} value={supplierId} onChange={setSupplierId}
-              getLabel={(s) => s.name} getValue={(s) => s.id} getSearchText={(s) => `${s.name} ${s.phone || ""} ${s.code}`}
-              placeholder="— Chọn nhà cung cấp —" /></div>
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-slate-500">Nhà cung cấp</label>
+              <button type="button" onClick={() => { setAddingNewSupplier((v) => !v); setSupplierId(""); }}
+                className="text-xs text-indigo-600 font-medium">
+                {addingNewSupplier ? "← Chọn NCC có sẵn" : "+ NCC mới"}
+              </button>
+            </div>
+            {addingNewSupplier ? (
+              <input value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} placeholder="Tên nhà cung cấp"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" />
+            ) : (
+              <SearchSelect options={suppliers} value={supplierId} onChange={setSupplierId}
+                getLabel={(s) => s.name} getValue={(s) => s.id} getSearchText={(s) => `${s.name} ${s.phone || ""} ${s.code}`}
+                placeholder="— Chọn nhà cung cấp —" />
+            )}
+          </div>
           <div><label className="text-sm text-slate-500">Kho nhập</label>
             <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base">
               {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select></div>
         </div>
+        {addingNewSupplier && (
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-sm text-slate-500">Số điện thoại</label>
+              <input value={newSupplierPhone} onChange={(e) => setNewSupplierPhone(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+            <div><label className="text-sm text-slate-500">Địa chỉ</label>
+              <input value={newSupplierAddress} onChange={(e) => setNewSupplierAddress(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+          </div>
+        )}
 
         <div className="space-y-2">
           <label className="text-sm text-slate-500">Sản phẩm</label>
           {items.map((it, idx) => (
             <div key={idx} className="flex gap-2 items-center flex-wrap">
+              <span className="text-xs text-slate-400 w-5 flex-none text-right">{idx + 1}</span>
               <ProductLinePicker products={products} stock={stock} warehouseId={warehouseId}
                 productId={it.productId} variantId={it.variantId} onProductCreated={onProductCreated}
                 onChangeProduct={(v) => updateItem(idx, "productId", v)} onChangeVariant={(v) => updateItem(idx, "variantId", v)} />
@@ -358,6 +389,7 @@ function EditPurchaseModal({ purchase, products, stock, onProductCreated, onClos
             <label className="text-xs text-slate-500">Sản phẩm</label>
             {items.map((it, idx) => (
               <div key={idx} className="flex gap-2 items-center flex-wrap">
+                <span className="text-xs text-slate-400 w-5 flex-none text-right">{idx + 1}</span>
                 <ProductLinePicker products={products} stock={stock} warehouseId={purchase.warehouse_id}
                   productId={it.productId} variantId={it.variantId} onProductCreated={onProductCreated}
                   onChangeProduct={(v) => updateItem(idx, "productId", v)} onChangeVariant={(v) => updateItem(idx, "variantId", v)} />
@@ -467,13 +499,15 @@ function ViewPurchaseModal({ purchase, onClose }) {
           <div>
             <table className="w-full text-sm">
               <thead><tr className="text-left text-slate-400 text-xs border-b border-slate-100">
-                <th className="py-1.5">Sản phẩm</th><th className="py-1.5 text-right">SL</th>
+                <th className="py-1.5 w-8">STT</th><th className="py-1.5">Sản phẩm</th><th className="py-1.5">ĐVT</th><th className="py-1.5 text-right">SL</th>
                 <th className="py-1.5 text-right">Giá</th><th className="py-1.5 text-right">Thành tiền</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
-                {full.items.map((it) => (
+                {full.items.map((it, idx) => (
                   <tr key={it.id}>
+                    <td className="py-1.5 text-slate-400">{idx + 1}</td>
                     <td className="py-1.5">{it.product_name}{it.variant_attrs ? <span className="text-slate-400"> ({Object.values(it.variant_attrs).join(" / ")})</span> : ""}</td>
+                    <td className="py-1.5 text-slate-500">{it.unit}</td>
                     <td className="py-1.5 text-right">{it.qty}</td>
                     <td className="py-1.5 text-right">{fmt(it.price)}</td>
                     <td className="py-1.5 text-right font-medium">{fmt(it.qty * it.price)}</td>

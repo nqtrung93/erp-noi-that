@@ -1,6 +1,7 @@
 import { query, withTransaction } from "../config/db.js";
 import { asyncHandler, badRequest, notFound } from "../utils/http.js";
 import { nextDocNo } from "../utils/docFormat.js";
+import { nextCode } from "../utils/sequence.js";
 import { upsertStock } from "./stock.controller.js";
 
 // GET /api/purchases
@@ -47,11 +48,12 @@ async function buildLineRows(c, items) {
   return { subtotal, lineRows };
 }
 
-// POST /api/purchases { supplierId, warehouseId, items:[{productId,variantId,qty,price}], discount, shippingFee, paidNow, method, note, isDraft }
+// POST /api/purchases { supplierId, newSupplier:{name,phone,address}, warehouseId, items:[{productId,variantId,qty,price}], discount, shippingFee, paidNow, method, note, isDraft }
+// newSupplier: tạo nhanh nhà cung cấp ngay lúc lập đơn (khi supplierId không có) — chỉ cần "name" là đủ.
 // VAT KHÔNG nhận từ client — luôn lấy tỷ lệ cố định ở Cài đặt.
 // isDraft=true: lưu nháp — KHÔNG tăng tồn kho, KHÔNG tạo phiếu chi, KHÔNG ghi công nợ.
 export const create = asyncHandler(async (req, res) => {
-  const { supplierId, warehouseId, items, discount, shippingFee, paidNow, method, note, isDraft } = req.body || {};
+  const { supplierId, newSupplier, warehouseId, items, discount, shippingFee, paidNow, method, note, isDraft } = req.body || {};
   if (!warehouseId) throw badRequest("Thiếu kho nhập hàng");
   if (!Array.isArray(items) || !items.length) throw badRequest("Đơn mua cần ít nhất 1 sản phẩm");
 
@@ -59,9 +61,17 @@ export const create = asyncHandler(async (req, res) => {
     const code = await nextDocNo(c, "purchase");
 
     let supplier = null;
+    let resolvedSupplierId = supplierId || null;
     if (supplierId) {
       supplier = (await c.query(`SELECT * FROM partners WHERE id = $1 FOR UPDATE`, [supplierId])).rows[0];
       if (!supplier) throw notFound("Nhà cung cấp không tồn tại");
+    } else if (newSupplier && String(newSupplier.name || "").trim()) {
+      const partnerCode = await nextCode(c, "NCC", "partner_seq");
+      supplier = (await c.query(
+        `INSERT INTO partners(code, name, type, phone, address) VALUES($1,$2,'supplier',$3,$4) RETURNING *`,
+        [partnerCode, newSupplier.name.trim(), newSupplier.phone || null, newSupplier.address || null]
+      )).rows[0];
+      resolvedSupplierId = supplier.id;
     }
 
     const { subtotal, lineRows } = await buildLineRows(c, items);
@@ -76,7 +86,7 @@ export const create = asyncHandler(async (req, res) => {
     const po = (await c.query(
       `INSERT INTO purchase_orders(code, supplier_id, supplier_name, warehouse_id, status, subtotal, discount, vat_rate, vat_amount, shipping_fee, total, paid, note, created_by)
        VALUES($1,$2,$3,$4,$5,$6,$7,0,0,$8,$9,$10,$11,$12) RETURNING *`,
-      [code, supplierId || null, supplier?.name || null, warehouseId, status, subtotal, disc, ship, total, paid, note || null, req.user.sub]
+      [code, resolvedSupplierId, supplier?.name || null, warehouseId, status, subtotal, disc, ship, total, paid, note || null, req.user.sub]
     )).rows[0];
 
     for (const line of lineRows) {
@@ -93,7 +103,7 @@ export const create = asyncHandler(async (req, res) => {
         await c.query(
           `INSERT INTO stock_movements(code, product_id, variant_id, warehouse_id, qty_change, type, partner_id, purchase_order_id, note, created_by)
            VALUES($1,$2,$3,$4,$5,'inbound',$6,$7,$8,$9)`,
-          [moveCode, line.productId, line.variantId, warehouseId, line.qty, supplierId || null, po.id, `Đơn mua ${code}`, req.user.sub]
+          [moveCode, line.productId, line.variantId, warehouseId, line.qty, resolvedSupplierId, po.id, `Đơn mua ${code}`, req.user.sub]
         );
       }
     }
@@ -104,7 +114,7 @@ export const create = asyncHandler(async (req, res) => {
       transaction = (await c.query(
         `INSERT INTO transactions(code, type, category_name, amount, method, partner_id, partner_name, note, created_by)
          VALUES($1,'Chi','Mua hàng',$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [txCode, paid, method || null, supplierId || null, supplier?.name || null, `Thanh toán đơn mua ${code}`, req.user.sub]
+        [txCode, paid, method || null, resolvedSupplierId, supplier?.name || null, `Thanh toán đơn mua ${code}`, req.user.sub]
       )).rows[0];
     }
 
