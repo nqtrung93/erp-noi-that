@@ -109,6 +109,7 @@ export default function PurchasesPage() {
                     <div className="flex gap-2 justify-end text-xs flex-wrap">
                       <button onClick={() => setViewingPurchase(o)} className="text-slate-600 hover:underline">Xem</button>
                       <button onClick={() => purchasesService.openInvoice(o.id)} className="text-indigo-600 hover:underline">In</button>
+                      <button onClick={() => purchasesService.downloadInvoice(o.id, o.code)} className="text-indigo-600 hover:underline">Tải xuống</button>
                       {can("purchases_edit") && ["Nháp", "Mới"].includes(o.status) && (
                         <button onClick={() => setEditingPurchase(o)} className="text-sky-600 hover:underline">Sửa</button>
                       )}
@@ -529,8 +530,12 @@ function ViewPurchaseModal({ purchase, onClose }) {
 
           {full.note && <div className="text-sm text-slate-500">Ghi chú: {full.note}</div>}
 
-          <div className="flex justify-end pt-2 border-t border-slate-100">
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Đóng</button>
+            <button type="button" onClick={() => purchasesService.downloadInvoice(purchase.id, purchase.code)}
+              className="border border-slate-300 text-slate-600 text-sm font-medium px-4 py-2 rounded-xl">Tải xuống</button>
+            <button type="button" onClick={() => purchasesService.openInvoice(purchase.id)}
+              className="bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-xl">In</button>
           </div>
         </div>
       )}
