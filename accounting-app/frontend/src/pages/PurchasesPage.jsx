@@ -164,8 +164,6 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProduct
   const [newSupplierAddress, setNewSupplierAddress] = useState("");
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id || "");
   const [items, setItems] = useState([{ productId: "", variantId: "", qty: 1, price: 0 }]);
-  const [discount, setDiscount] = useState("");
-  const [shippingFee, setShippingFee] = useState("");
   const [paidNow, setPaidNow] = useState("");
   const [method, setMethod] = useState("Tiền mặt");
   const [note, setNote] = useState("");
@@ -177,8 +175,7 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProduct
   }, []);
 
   const subtotal = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
-  const afterDiscount = Math.max(subtotal - (Number(discount) || 0), 0);
-  const total = Math.max(afterDiscount + (Number(shippingFee) || 0), 0);
+  const total = subtotal;
 
   function updateItem(idx, field, value) {
     setItems((prev) => prev.map((it, i) => {
@@ -216,7 +213,7 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProduct
         newSupplier: addingNewSupplier ? { name: newSupplierName, phone: newSupplierPhone || null, address: newSupplierAddress || null } : null,
         warehouseId,
         items: items.map((it) => ({ productId: it.productId, variantId: it.variantId || null, qty: Number(it.qty), price: Number(it.price) })),
-        discount: Number(discount) || 0, shippingFee: Number(shippingFee) || 0,
+        discount: 0, shippingFee: 0,
         paidNow: Number(paidNow) || 0, method, note: note || null, isDraft,
       });
       onSaved();
@@ -284,22 +281,16 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProduct
           <button type="button" onClick={addLine} className="text-indigo-600 text-sm font-medium">+ Thêm dòng</button>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div><label className="text-sm text-slate-500">Giảm giá</label>
-            <MoneyInput value={discount} onChange={setDiscount} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
-          <div><label className="text-sm text-slate-500">Phí ship</label>
-            <MoneyInput value={shippingFee} onChange={setShippingFee} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
+        <div className="grid grid-cols-2 gap-3">
           <div><label className="text-sm text-slate-500">Phương thức</label>
             <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base">
               <option>Tiền mặt</option><option>Chuyển khoản</option>
             </select></div>
+          <div><label className="text-sm text-slate-500">Thanh toán ngay</label>
+            <MoneyInput value={paidNow} onChange={setPaidNow} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
         </div>
-        <div><label className="text-sm text-slate-500">Thanh toán ngay</label>
-          <MoneyInput value={paidNow} onChange={setPaidNow} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
 
         <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
-          {Number(discount) > 0 && <div>Giảm giá: <span className="font-medium">-{fmt(discount)}</span></div>}
-          {Number(shippingFee) > 0 && <div>Phí ship: <span className="font-medium">{fmt(shippingFee)}</span></div>}
           <div className="font-semibold text-lg">Tổng cộng: {fmt(total)}</div>
         </div>
 
@@ -322,8 +313,6 @@ function CreatePurchaseModal({ products, warehouses, suppliers, stock, onProduct
 // Sửa đơn mua khi còn Nháp/Mới — không đổi NCC/kho, chỉ sửa dòng sản phẩm/giảm giá/phí ship/ghi chú.
 function EditPurchaseModal({ purchase, products, stock, onProductCreated, onClose, onSaved }) {
   const [items, setItems] = useState(null);
-  const [discount, setDiscount] = useState(String(purchase.discount));
-  const [shippingFee, setShippingFee] = useState(String(purchase.shipping_fee));
   const [note, setNote] = useState(purchase.note || "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -335,8 +324,7 @@ function EditPurchaseModal({ purchase, products, stock, onProductCreated, onClos
   }, [purchase.id]);
 
   const subtotal = (items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
-  const afterDiscount = Math.max(subtotal - (Number(discount) || 0), 0);
-  const total = Math.max(afterDiscount + (Number(shippingFee) || 0), 0);
+  const total = subtotal;
 
   function updateItem(idx, field, value) {
     setItems((prev) => prev.map((it, i) => {
@@ -366,7 +354,7 @@ function EditPurchaseModal({ purchase, products, stock, onProductCreated, onClos
     try {
       await purchasesService.updatePurchase(purchase.id, {
         items: items.map((it) => ({ productId: it.productId, variantId: it.variantId || null, qty: Number(it.qty), price: Number(it.price) })),
-        discount: Number(discount) || 0, shippingFee: Number(shippingFee) || 0, note: note || null,
+        discount: 0, shippingFee: 0, note: note || null,
       });
       onSaved();
     } catch (e2) { setError(e2.message); } finally { setSaving(false); }
@@ -408,16 +396,7 @@ function EditPurchaseModal({ purchase, products, stock, onProductCreated, onClos
             <button type="button" onClick={addLine} className="text-indigo-600 text-xs font-medium">+ Thêm dòng</button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-sm text-slate-500">Giảm giá</label>
-              <MoneyInput value={discount} onChange={setDiscount} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
-            <div><label className="text-sm text-slate-500">Phí ship</label>
-              <MoneyInput value={shippingFee} onChange={setShippingFee} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base" /></div>
-          </div>
-
           <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
-            {Number(discount) > 0 && <div>Giảm giá: <span className="font-medium">-{fmt(discount)}</span></div>}
-            {Number(shippingFee) > 0 && <div>Phí ship: <span className="font-medium">{fmt(shippingFee)}</span></div>}
             <div className="font-semibold text-lg">Tổng cộng: {fmt(total)}</div>
             {purchase.status === "Mới" && <div className="text-xs text-slate-400">Đã trả trước đó giữ nguyên: {fmt(purchase.paid)}</div>}
           </div>
@@ -518,9 +497,6 @@ function ViewPurchaseModal({ purchase, onClose }) {
           </div>
 
           <div className="text-base text-right space-y-1 border-t border-slate-100 pt-3">
-            {Number(full.discount) > 0 && <div>Giảm giá: <span className="font-medium">-{fmt(full.discount)}</span></div>}
-            {Number(full.vat_amount) > 0 && <div>VAT ({full.vat_rate}%): <span className="font-medium">{fmt(full.vat_amount)}</span></div>}
-            {Number(full.shipping_fee) > 0 && <div>Phí ship: <span className="font-medium">{fmt(full.shipping_fee)}</span></div>}
             <div className="font-semibold text-lg">Tổng cộng: {fmt(full.total)}</div>
             <div className="text-sm text-emerald-600">Đã trả: {fmt(full.paid)}</div>
             {remaining > 0 && <div className="text-sm text-red-500">Còn lại: {fmt(remaining)}</div>}

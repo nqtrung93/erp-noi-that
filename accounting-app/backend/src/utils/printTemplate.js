@@ -75,8 +75,6 @@ export const DEFAULT_INVOICE_TEMPLATE = `
   </table>
 
   <div class="summary">
-    <div class="line"><span>Giảm giá:</span><span>{{discount}}</span></div>
-    <div class="line"><span>Phí ship:</span><span>{{shippingFee}}</span></div>
     <div class="line" style="font-weight:bold; font-size:14px;"><span>Tổng tiền thanh toán:</span><span>{{total}}</span></div>
     <div class="line"><span>Đã thanh toán:</span><span>{{paid}}</span></div>
     <div class="line"><span>Còn lại:</span><span>{{due}}</span></div>
