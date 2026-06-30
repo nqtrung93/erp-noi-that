@@ -175,7 +175,7 @@ function CustomerFormModal({ customer, onClose, onSaved }) {
 
 function DebtModal({ customer, onClose, onSaved }) {
   const [direction, setDirection] = useState("decrease");
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(Number(customer.debt) > 0 ? String(customer.debt) : "");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);

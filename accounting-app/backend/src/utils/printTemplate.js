@@ -6,7 +6,7 @@ import { numberToVietnameseWords } from "./numberToWords.js";
 // chuẩn cho nghiệp vụ bán hàng — hiển thị cố định cho đúng hình thức chứng từ, không phát sinh
 // bút toán kế toán thật trong hệ thống (app này không làm sổ kế toán kép).
 export const DEFAULT_INVOICE_TEMPLATE = `
-<html><head><meta charset="utf-8"><title>Phiếu xuất kho {{code}}</title>
+<html><head><meta charset="utf-8"><title>{{docTitle}} {{code}}</title>
 <style>
   body { font-family: "Times New Roman", serif; padding: 24px; font-size: 13px; color: #111; }
   .header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
@@ -45,20 +45,20 @@ export const DEFAULT_INVOICE_TEMPLATE = `
     </div>
   </div>
 
-  <h1>PHIẾU XUẤT KHO BÁN HÀNG</h1>
+  <h1>{{docTitle}}</h1>
   <div class="sub-center"><i>Ngày {{day}} tháng {{month}} năm {{year}}</i></div>
   <div class="sub-center">Số: <strong>{{code}}</strong></div>
 
   <div class="info-grid">
     <div class="col">
-      Tên khách hàng: {{customerName}}<br/>
+      {{partnerLabel}}: {{customerName}}<br/>
       Địa chỉ: {{customerAddress}}<br/>
       Điện thoại: {{customerPhone}}<br/>
       Diễn giải: {{dienGiai}}
     </div>
     <div class="col2">
-      Nợ: 131<br/>
-      Có: 5111<br/>
+      Nợ: {{debitCode}}<br/>
+      Có: {{creditCode}}<br/>
       Loại tiền: VND
     </div>
   </div>
@@ -98,27 +98,31 @@ function escapeAttrs(attrs) {
   return ` (${Object.entries(attrs).map(([k, v]) => `${k}: ${v}`).join(", ")})`;
 }
 
-function buildDienGiai(order) {
-  const due = Number(order.total) - Number(order.paid);
+function buildDienGiai(doc, verb) {
+  const due = Number(doc.total) - Number(doc.paid);
   const parts = [];
-  if (order.note) parts.push(order.note);
-  if (Number(order.paid) > 0 && due > 0) {
-    parts.push(`Đặt ${Number(order.paid).toLocaleString("vi-VN")} thu còn lại ${due.toLocaleString("vi-VN")}`);
-  } else if (due <= 0 && Number(order.total) > 0) {
+  if (doc.note) parts.push(doc.note);
+  if (Number(doc.paid) > 0 && due > 0) {
+    parts.push(`Đặt ${Number(doc.paid).toLocaleString("vi-VN")} ${verb} còn lại ${due.toLocaleString("vi-VN")}`);
+  } else if (due <= 0 && Number(doc.total) > 0) {
     parts.push("Đã thanh toán đủ");
   }
   return parts.join(" — ") || "—";
 }
 
-export async function renderInvoiceHtml(order, items) {
+// kind: 'sale' (Phiếu xuất kho bán hàng, Nợ 131/Có 5111) hoặc 'purchase' (Phiếu nhập kho mua
+// hàng, Nợ 156/Có 331) — cùng một mẫu HTML, chỉ khác tiêu đề/định khoản/đối tác hiển thị.
+export async function renderInvoiceHtml(doc, items, kind = "sale") {
   const companyRow = (await query(`SELECT value FROM app_settings WHERE key = 'company_info'`)).rows[0];
   const company = companyRow?.value ? JSON.parse(companyRow.value) : {};
   const tplRow = (await query(`SELECT value FROM app_settings WHERE key = 'tpl_invoice'`)).rows[0];
   const template = tplRow?.value || DEFAULT_INVOICE_TEMPLATE;
 
-  let customer = {};
-  if (order.customer_id) {
-    customer = (await query(`SELECT phone, address FROM partners WHERE id = $1`, [order.customer_id])).rows[0] || {};
+  const isPurchase = kind === "purchase";
+  const partnerId = isPurchase ? doc.supplier_id : doc.customer_id;
+  let partner = {};
+  if (partnerId) {
+    partner = (await query(`SELECT phone, address FROM partners WHERE id = $1`, [partnerId])).rows[0] || {};
   }
 
   const rowsHtml = items.map((it, idx) => `
@@ -132,26 +136,30 @@ export async function renderInvoiceHtml(order, items) {
       <td class="num">${(Number(it.qty) * Number(it.price)).toLocaleString("vi-VN")}</td>
     </tr>`).join("");
 
-  const due = Number(order.total) - Number(order.paid);
-  const createdAt = new Date(order.created_at);
+  const due = Number(doc.total) - Number(doc.paid);
+  const createdAt = new Date(doc.created_at);
   const values = {
-    code: order.code,
+    docTitle: isPurchase ? "PHIẾU NHẬP KHO MUA HÀNG" : "PHIẾU XUẤT KHO BÁN HÀNG",
+    partnerLabel: isPurchase ? "Tên nhà cung cấp" : "Tên khách hàng",
+    debitCode: isPurchase ? "156" : "131",
+    creditCode: isPurchase ? "331" : "5111",
+    code: doc.code,
     day: String(createdAt.getDate()).padStart(2, "0"),
     month: String(createdAt.getMonth() + 1).padStart(2, "0"),
     year: String(createdAt.getFullYear()),
     date: createdAt.toLocaleString("vi-VN"),
-    customerName: order.customer_name || "Khách lẻ",
-    customerPhone: customer.phone || "",
-    customerAddress: customer.address || "",
-    dienGiai: buildDienGiai(order),
+    customerName: (isPurchase ? doc.supplier_name : doc.customer_name) || (isPurchase ? "" : "Khách lẻ"),
+    customerPhone: partner.phone || "",
+    customerAddress: partner.address || "",
+    dienGiai: buildDienGiai(doc, isPurchase ? "trả" : "thu"),
     rowsHtml,
-    subtotal: Number(order.subtotal).toLocaleString("vi-VN"),
-    discount: Number(order.discount).toLocaleString("vi-VN"),
-    shippingFee: Number(order.shipping_fee || 0).toLocaleString("vi-VN"),
-    total: Number(order.total).toLocaleString("vi-VN"),
-    paid: Number(order.paid).toLocaleString("vi-VN"),
+    subtotal: Number(doc.subtotal).toLocaleString("vi-VN"),
+    discount: Number(doc.discount).toLocaleString("vi-VN"),
+    shippingFee: Number(doc.shipping_fee || 0).toLocaleString("vi-VN"),
+    total: Number(doc.total).toLocaleString("vi-VN"),
+    paid: Number(doc.paid).toLocaleString("vi-VN"),
     due: due.toLocaleString("vi-VN"),
-    amountWords: numberToVietnameseWords(order.total),
+    amountWords: numberToVietnameseWords(doc.total),
     companyName: company.name || "",
     companyAddress: company.address || "",
     companyPhone: company.phone || "",

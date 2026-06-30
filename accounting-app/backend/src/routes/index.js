@@ -153,6 +153,7 @@ r.post("/purchases/:id/confirm", verifyToken, requirePerm("purchases_edit"), pur
 r.patch("/purchases/:id/status", verifyToken, requirePerm("purchases_edit"), purchase.changeStatus);
 r.post("/purchases/:id/payments", verifyToken, requirePerm("purchases_edit"), purchase.addPayment);
 r.delete("/purchases/:id", verifyToken, requirePerm("purchases_edit"), purchase.remove);
+r.get("/purchases/:id/invoice", verifyToken, requirePerm("purchases_view"), purchase.invoice);
 
 // -------- Lương nhân viên & BHXH --------
 const employees = makeCrud("employees", ["name", "phone", "position", "base_salary", "allowance", "insurance_base", "active"], "name");
@@ -237,5 +238,11 @@ r.get("/reports/profit-loss", verifyToken, requirePerm("reports"),
   asyncHandler(async (req, res) => res.json(await reportService.profitLoss(req.query))));
 r.get("/reports/debt", verifyToken, requirePerm("reports"),
   asyncHandler(async (req, res) => res.json(await reportService.debtReport(req.query.type))));
+r.get("/reports/inventory", verifyToken, requirePerm("reports"),
+  asyncHandler(async (req, res) => res.json(await reportService.inventoryReport())));
+r.get("/reports/sales", verifyToken, requirePerm("reports"),
+  asyncHandler(async (req, res) => res.json(await reportService.salesReport(req.query))));
+r.get("/reports/purchases", verifyToken, requirePerm("reports"),
+  asyncHandler(async (req, res) => res.json(await reportService.purchaseReport(req.query))));
 
 export default r;

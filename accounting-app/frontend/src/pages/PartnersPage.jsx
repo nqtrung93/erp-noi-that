@@ -343,7 +343,7 @@ function CreatePartnerModal({ onClose, onSaved }) {
 // direction=increase: ghi nợ thuần (không tiền mặt). direction=decrease: thu/trả nợ (tạo kèm phiếu Thu/Chi).
 function DebtModal({ partner, onClose, onSaved }) {
   const [direction, setDirection] = useState("decrease");
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(Number(partner.debt) > 0 ? String(partner.debt) : "");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);

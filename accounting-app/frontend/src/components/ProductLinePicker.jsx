@@ -58,7 +58,7 @@ export default function ProductLinePicker({ products, stock, warehouseId, produc
         <span className="text-xs text-slate-400 whitespace-nowrap w-14 flex-none">{product.unit}</span>
       )}
       <button type="button" onClick={() => setCreating(true)} title="Tạo sản phẩm mới"
-        className="text-xs text-indigo-600 font-medium whitespace-nowrap">+ Mới</button>
+        className="text-xs text-indigo-600 font-medium whitespace-nowrap">+ SP mới</button>
       {creating && (
         <QuickAddProductModal
           onClose={() => setCreating(false)}

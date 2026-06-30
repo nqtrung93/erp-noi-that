@@ -3,6 +3,7 @@ import { asyncHandler, badRequest, notFound } from "../utils/http.js";
 import { nextDocNo } from "../utils/docFormat.js";
 import { nextCode } from "../utils/sequence.js";
 import { upsertStock } from "./stock.controller.js";
+import { renderInvoiceHtml } from "../utils/printTemplate.js";
 
 // GET /api/purchases
 export const list = asyncHandler(async (req, res) => {
@@ -330,4 +331,19 @@ export const addPayment = asyncHandler(async (req, res) => {
     return { purchase: updated, transaction: tx };
   });
   res.status(201).json(result);
+});
+
+// GET /api/purchases/:id/invoice — phiếu nhập kho mua hàng HTML, dùng chung mẫu in với đơn bán
+export const invoice = asyncHandler(async (req, res) => {
+  const po = (await query(`SELECT * FROM purchase_orders WHERE id = $1`, [req.params.id])).rows[0];
+  if (!po) throw notFound();
+  const items = (await query(
+    `SELECT poi.*, p.name AS product_name, p.sku, p.unit, v.attrs AS variant_attrs, v.sku AS variant_sku
+       FROM purchase_order_items poi JOIN products p ON p.id = poi.product_id
+       LEFT JOIN product_variants v ON v.id = poi.variant_id
+       WHERE poi.purchase_order_id = $1`,
+    [po.id]
+  )).rows;
+
+  res.type("html").send(await renderInvoiceHtml(po, items, "purchase"));
 });

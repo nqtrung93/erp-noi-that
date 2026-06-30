@@ -105,6 +105,7 @@ export default function PurchasesPage() {
                   <td className="py-2 px-3">
                     <div className="flex gap-2 justify-end text-xs flex-wrap">
                       <button onClick={() => setViewingPurchase(o)} className="text-slate-600 hover:underline">Xem</button>
+                      <button onClick={() => purchasesService.openInvoice(o.id)} className="text-indigo-600 hover:underline">In</button>
                       {can("purchases_edit") && ["Nháp", "Mới"].includes(o.status) && (
                         <button onClick={() => setEditingPurchase(o)} className="text-sky-600 hover:underline">Sửa</button>
                       )}
