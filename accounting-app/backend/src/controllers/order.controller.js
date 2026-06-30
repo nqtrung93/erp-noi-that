@@ -4,6 +4,7 @@ import { nextDocNo } from "../utils/docFormat.js";
 import { nextCode } from "../utils/sequence.js";
 import { upsertStock } from "./stock.controller.js";
 import { renderInvoiceHtml } from "../utils/printTemplate.js";
+import { htmlToPdf } from "../utils/pdf.js";
 
 // GET /api/orders
 export const list = asyncHandler(async (req, res) => {
@@ -331,9 +332,8 @@ export const addPayment = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
-// GET /api/orders/:id/invoice — hoá đơn HTML, dùng mẫu tuỳ chỉnh ở Cài đặt nếu có
-export const invoice = asyncHandler(async (req, res) => {
-  const order = (await query(`SELECT * FROM orders WHERE id = $1`, [req.params.id])).rows[0];
+async function loadOrderForInvoice(id) {
+  const order = (await query(`SELECT * FROM orders WHERE id = $1`, [id])).rows[0];
   if (!order) throw notFound();
   const items = (await query(
     `SELECT oi.*, p.name AS product_name, p.sku, p.unit, v.attrs AS variant_attrs, v.sku AS variant_sku
@@ -342,6 +342,19 @@ export const invoice = asyncHandler(async (req, res) => {
        WHERE oi.order_id = $1`,
     [order.id]
   )).rows;
+  return { order, items };
+}
 
+// GET /api/orders/:id/invoice — hoá đơn HTML, dùng mẫu tuỳ chỉnh ở Cài đặt nếu có
+export const invoice = asyncHandler(async (req, res) => {
+  const { order, items } = await loadOrderForInvoice(req.params.id);
   res.type("html").send(await renderInvoiceHtml(order, items));
+});
+
+// GET /api/orders/:id/invoice.pdf — phiếu khổ A4 dạng PDF, dùng cho nút "Tải xuống"
+export const invoicePdf = asyncHandler(async (req, res) => {
+  const { order, items } = await loadOrderForInvoice(req.params.id);
+  const html = await renderInvoiceHtml(order, items);
+  const pdf = await htmlToPdf(html);
+  res.type("application/pdf").send(pdf);
 });

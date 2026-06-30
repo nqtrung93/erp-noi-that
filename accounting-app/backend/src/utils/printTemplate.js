@@ -8,7 +8,9 @@ import { numberToVietnameseWords } from "./numberToWords.js";
 export const DEFAULT_INVOICE_TEMPLATE = `
 <html><head><meta charset="utf-8"><title>{{docTitle}} {{code}}</title>
 <style>
+  @page { size: A4; margin: 14mm 12mm; }
   body { font-family: "Times New Roman", serif; padding: 24px; font-size: 13px; color: #111; }
+  @media print { body { padding: 0; } }
   .header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
   .header img.logo { max-height: 64px; max-width: 140px; object-fit: contain; flex: none; }
   .company-name { font-weight: bold; text-transform: uppercase; font-size: 13px; }

@@ -24,14 +24,16 @@ export async function openInvoice(id) {
   win.onload = () => win.print();
 }
 
-// Tải phiếu về máy, đặt tên file dạng "Phiếu xuất kho bán hàng - <mã đơn>.html".
+// Tải phiếu về máy dạng PDF khổ A4, đặt tên file dạng "Phiếu xuất kho bán hàng - <mã đơn>.pdf".
 export async function downloadInvoice(id, code) {
-  const html = await fetchInvoiceHtml(id);
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const base = import.meta.env.VITE_API_URL || "http://localhost:4100/api";
+  const token = localStorage.getItem("acc_token");
+  const res = await fetch(`${base}/orders/${id}/invoice.pdf`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `Phiếu xuất kho bán hàng - ${code}.html`;
+  a.download = `Phiếu xuất kho bán hàng - ${code}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
 }
