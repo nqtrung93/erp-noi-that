@@ -9,7 +9,8 @@ export const DEFAULT_INVOICE_TEMPLATE = `
 <html><head><meta charset="utf-8"><title>Phiếu xuất kho {{code}}</title>
 <style>
   body { font-family: "Times New Roman", serif; padding: 24px; font-size: 13px; color: #111; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+  .header img.logo { max-height: 64px; max-width: 140px; object-fit: contain; flex: none; }
   .company-name { font-weight: bold; text-transform: uppercase; font-size: 13px; }
   .company-meta { color: #444; font-size: 12px; }
   h1 { text-align: center; font-size: 18px; margin: 16px 0 2px; }
@@ -35,6 +36,7 @@ export const DEFAULT_INVOICE_TEMPLATE = `
 </head>
 <body>
   <div class="header">
+    {{companyLogoHtml}}
     <div>
       <div class="company-name">{{companyName}}</div>
       <div class="company-meta">Địa chỉ: {{companyAddress}}</div>
@@ -157,6 +159,7 @@ export async function renderInvoiceHtml(order, items) {
     companyPhone: company.phone || "",
     companyEmail: company.email || "",
     companyTaxId: company.taxId || "",
+    companyLogoHtml: company.logo ? `<img class="logo" src="${company.logo}" alt="logo" />` : "",
   };
 
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => values[key] ?? "");

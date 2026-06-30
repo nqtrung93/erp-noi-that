@@ -68,8 +68,9 @@ r.get("/settings/company", verifyToken, requirePerm("settings_view"), asyncHandl
   res.json(rows[0]?.value ? JSON.parse(rows[0].value) : {});
 }));
 r.put("/settings/company", verifyToken, requirePerm("settings_edit"), asyncHandler(async (req, res) => {
-  const { name, address, phone, email, taxId } = req.body || {};
-  const info = { name: name || "", address: address || "", phone: phone || "", email: email || "", taxId: taxId || "" };
+  const { name, address, phone, email, taxId, logo } = req.body || {};
+  if (logo && logo.length > 1_500_000) throw badRequest("Logo quá lớn — vui lòng chọn ảnh dưới ~1MB");
+  const info = { name: name || "", address: address || "", phone: phone || "", email: email || "", taxId: taxId || "", logo: logo || "" };
   await query(
     `INSERT INTO app_settings(key, value) VALUES('company_info', $1)
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,

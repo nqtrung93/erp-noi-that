@@ -172,7 +172,7 @@ function WarehouseModal({ warehouse, onClose, onSaved }) {
 }
 
 function CompanyInfoManager() {
-  const [form, setForm] = useState({ name: "", address: "", phone: "", email: "", taxId: "" });
+  const [form, setForm] = useState({ name: "", address: "", phone: "", email: "", taxId: "", logo: "" });
   const [vatRate, setVatRate] = useState("0");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -182,6 +182,17 @@ function CompanyInfoManager() {
     settingsService.getCompanyInfo().then(setForm).catch((e) => setError(e.message));
     settingsService.getVatRate().then((r) => setVatRate(String(r.rate))).catch(() => {});
   }, []);
+
+  function handleLogoFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError("");
+    if (file.size > 1_000_000) { setError("Logo quá lớn — vui lòng chọn ảnh dưới 1MB"); e.target.value = ""; return; }
+    const reader = new FileReader();
+    reader.onload = () => setForm((f) => ({ ...f, logo: reader.result }));
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
 
   async function save(e) {
     e.preventDefault();
@@ -205,6 +216,21 @@ function CompanyInfoManager() {
       </div>
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
       {saved && <div className="bg-emerald-50 text-emerald-700 text-sm rounded-lg px-3 py-2">Đã lưu.</div>}
+      <div>
+        <label className="text-xs text-slate-500">Logo công ty</label>
+        <div className="flex items-center gap-3 mt-1">
+          {form.logo && (
+            <img src={form.logo} alt="logo" className="h-14 w-auto max-w-[140px] object-contain border border-slate-200 rounded-lg p-1" />
+          )}
+          <label className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 cursor-pointer hover:bg-slate-50">
+            {form.logo ? "Đổi logo" : "Tải logo lên"}
+            <input type="file" accept="image/*" onChange={handleLogoFile} className="hidden" />
+          </label>
+          {form.logo && (
+            <button type="button" onClick={() => setForm((f) => ({ ...f, logo: "" }))} className="text-red-500 text-xs">Xoá logo</button>
+          )}
+        </div>
+      </div>
       <div>
         <label className="text-xs text-slate-500">Tên công ty</label>
         <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -246,7 +272,7 @@ function CompanyInfoManager() {
   );
 }
 
-const PLACEHOLDER_HINT = "{{companyName}} {{companyAddress}} {{companyPhone}} {{companyEmail}} {{companyTaxId}} {{code}} {{day}} {{month}} {{year}} {{date}} {{customerName}} {{customerPhone}} {{customerAddress}} {{dienGiai}} {{rowsHtml}} {{subtotal}} {{discount}} {{shippingFee}} {{total}} {{paid}} {{due}} {{amountWords}}";
+const PLACEHOLDER_HINT = "{{companyLogoHtml}} {{companyName}} {{companyAddress}} {{companyPhone}} {{companyEmail}} {{companyTaxId}} {{code}} {{day}} {{month}} {{year}} {{date}} {{customerName}} {{customerPhone}} {{customerAddress}} {{dienGiai}} {{rowsHtml}} {{subtotal}} {{discount}} {{shippingFee}} {{total}} {{paid}} {{due}} {{amountWords}}";
 
 function TemplatesManager() {
   const [html, setHtml] = useState("");
