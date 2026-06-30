@@ -5,6 +5,7 @@ import { fmt } from "../utils/format.js";
 import Modal from "../components/Modal.jsx";
 import { PAYMENT_METHODS } from "../utils/constants.js";
 import { exportCsv } from "../utils/exportCsv.js";
+import * as bankService from "../services/bank.service.js";
 
 export default function SuppliersPage() {
   const { can } = useAuth();
@@ -156,17 +157,22 @@ function SupplierModal({ supplier, onClose, onSaved }) {
 function PayDebtModal({ supplier, onClose, onSaved }) {
   const [amount, setAmount] = useState(Number(supplier.debt) || 0);
   const [method, setMethod] = useState("Tiền mặt");
+  const [bankAccountId, setBankAccountId] = useState("");
+  const [bankAccounts, setBankAccounts] = useState([]);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => { bankService.listBankAccounts().then(setBankAccounts).catch(() => {}); }, []);
 
   async function submit(e) {
     e.preventDefault();
     setError("");
     if (!amount || Number(amount) <= 0) return setError("Số tiền không hợp lệ");
+    if (method === "Ngân hàng" && !bankAccountId) return setError("Chọn tài khoản ngân hàng");
     setSaving(true);
     try {
-      await suppliersService.paySupplierDebt(supplier.id, { amount: Number(amount), method, note });
+      await suppliersService.paySupplierDebt(supplier.id, { amount: Number(amount), method, bankAccountId: method === "Ngân hàng" ? bankAccountId : null, note });
       onSaved();
     } catch (e2) {
       setError(e2.message);
@@ -192,6 +198,16 @@ function PayDebtModal({ supplier, onClose, onSaved }) {
             {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
           </select>
         </div>
+        {method === "Ngân hàng" && (
+          <div>
+            <label className="text-xs text-slate-500">Tài khoản ngân hàng</label>
+            <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              <option value="">— Chọn tài khoản —</option>
+              {bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label className="text-xs text-slate-500">Ghi chú</label>
           <input value={note} onChange={(e) => setNote(e.target.value)}

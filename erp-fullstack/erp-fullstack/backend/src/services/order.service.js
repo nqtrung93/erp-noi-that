@@ -150,7 +150,7 @@ export async function updateOrder(orderId, input, actorId) {
 }
 
 // Tạo phiếu thu/chi gắn với 1 đơn hàng. Thu → cộng vào orders.paid (giới hạn không vượt total).
-export async function addOrderPayment(orderId, { type, amount, method, note }, actorId) {
+export async function addOrderPayment(orderId, { type, amount, method, note, bankAccountId }, actorId) {
   if (!["Thu", "Chi"].includes(type)) throw badRequest("Loại phiếu không hợp lệ");
   if (!amount || Number(amount) <= 0) throw badRequest("Số tiền không hợp lệ");
 
@@ -160,9 +160,10 @@ export async function addOrderPayment(orderId, { type, amount, method, note }, a
 
     const code = await nextDocNo(client, "transaction");
     const tx = (await client.query(
-      `INSERT INTO transactions (code, type, category, amount, method, party_type, party_id, party_name, ref_type, ref_id, note, created_by)
-       VALUES ($1,$2,'Theo đơn hàng',$3,$4,'Khách hàng',$5,NULL,'order',$6,$7,$8) RETURNING *`,
-      [code, type, Number(amount), method || null, order.customer_id, orderId, note || null, actorId]
+      `INSERT INTO transactions (code, type, category, amount, method, bank_account_id, party_type, party_id, party_name, ref_type, ref_id, note, created_by)
+       VALUES ($1,$2,'Theo đơn hàng',$3,$4,$5,'Khách hàng',$6,NULL,'order',$7,$8,$9) RETURNING *`,
+      [code, type, Number(amount), method || null, method === "Ngân hàng" ? (bankAccountId || null) : null,
+       order.customer_id, orderId, note || null, actorId]
     )).rows[0];
 
     if (type === "Thu") {

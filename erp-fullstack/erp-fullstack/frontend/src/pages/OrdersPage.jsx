@@ -8,6 +8,7 @@ import * as carriersService from "../services/carriers.service.js";
 import * as orderSourcesService from "../services/orderSources.service.js";
 import * as shopsService from "../services/shops.service.js";
 import * as stockService from "../services/stock.service.js";
+import * as bankService from "../services/bank.service.js";
 import { fmt, fmtDate } from "../utils/format.js";
 import Badge from "../components/Badge.jsx";
 import Modal from "../components/Modal.jsx";
@@ -43,6 +44,7 @@ export default function OrdersPage() {
   const [filterTo, setFilterTo] = useState("");
   const [sources, setSources] = useState([]);
   const [shops, setShops] = useState([]);
+  const [bankAccounts, setBankAccounts] = useState([]);
   const [selected, setSelected] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
 
@@ -54,6 +56,7 @@ export default function OrdersPage() {
     reload();
     orderSourcesService.listOrderSources().then(setSources).catch(() => {});
     shopsService.listShops().then(setShops).catch(() => {});
+    bankService.listBankAccounts().then(setBankAccounts).catch(() => {});
   }, []);
 
   // Lọc theo SKU gọi lại API (backend tìm trong order_items) — debounce nhẹ để tránh gọi liên tục khi gõ.
@@ -273,7 +276,7 @@ export default function OrdersPage() {
         />
       )}
       {payingOrder && (
-        <PaymentModal order={payingOrder} onClose={() => setPayingOrder(null)} onSaved={() => { setPayingOrder(null); reload(); }} />
+        <PaymentModal order={payingOrder} bankAccounts={bankAccounts} onClose={() => setPayingOrder(null)} onSaved={() => { setPayingOrder(null); reload(); }} />
       )}
       {viewingOrder && (
         <OrderDetailModal order={viewingOrder} onClose={() => setViewingOrder(null)} />
@@ -902,10 +905,11 @@ function OrderFormModal({ order, onClose, onSaved, ecommerce = false }) {
 }
 
 // Tạo phiếu Thu/Chi gắn với 1 đơn hàng. Thu sẽ tự cộng vào "đã thu" của đơn (giới hạn theo tổng tiền).
-function PaymentModal({ order, onClose, onSaved }) {
+function PaymentModal({ order, bankAccounts, onClose, onSaved }) {
   const [type, setType] = useState("Thu");
   const [amount, setAmount] = useState(Math.max(Number(order.total) - Number(order.paid), 0));
   const [method, setMethod] = useState("Tiền mặt");
+  const [bankAccountId, setBankAccountId] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -914,9 +918,10 @@ function PaymentModal({ order, onClose, onSaved }) {
     e.preventDefault();
     setError("");
     if (!amount || Number(amount) <= 0) return setError("Số tiền không hợp lệ");
+    if (method === "Ngân hàng" && !bankAccountId) return setError("Chọn tài khoản ngân hàng");
     setSaving(true);
     try {
-      await ordersService.addOrderPayment(order.id, { type, amount: Number(amount), method, note });
+      await ordersService.addOrderPayment(order.id, { type, amount: Number(amount), method, bankAccountId: method === "Ngân hàng" ? bankAccountId : null, note });
       onSaved();
     } catch (e2) {
       setError(e2.message);
@@ -949,6 +954,16 @@ function PaymentModal({ order, onClose, onSaved }) {
             </select>
           </div>
         </div>
+        {method === "Ngân hàng" && (
+          <div>
+            <label className="text-xs text-slate-500">Tài khoản ngân hàng</label>
+            <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              <option value="">— Chọn tài khoản —</option>
+              {bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label className="text-xs text-slate-500">Số tiền</label>
           <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)}

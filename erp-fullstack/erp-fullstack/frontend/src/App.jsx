@@ -28,7 +28,7 @@ const TABS = [
   { id: "shipping", label: "Vận chuyển", perm: "shipping_view", el: <ShippingPage /> },
   { id: "vatinvoice", label: "Hoá đơn VAT", perm: "vatinvoice_view", el: <VatInvoicesPage /> },
   { id: "warranty", label: "Bảo hành", perm: "warranty_view", el: <WarrantyPage /> },
-  { id: "finance", label: "Thu chi", perm: "finance_view", el: <FinancePage /> },
+  { id: "finance", label: "Sổ quỹ", perm: "finance_view", el: <FinancePage /> },
   { id: "reports", label: "Báo cáo", perm: "reports", el: <ReportsPage /> },
   { id: "employees", label: "Nhân viên", perm: "employees_view", el: <EmployeesPage /> },
   { id: "settings", label: "Cài đặt", perm: "settings_view", el: <SettingsPage /> },

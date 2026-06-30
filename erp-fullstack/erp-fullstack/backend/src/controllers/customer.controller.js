@@ -40,7 +40,7 @@ export const create = asyncHandler(async (req, res) => {
 // Công nợ KH = Σ(total - paid) tính từ đơn hàng, nên phải PHÂN BỔ số tiền thu vào orders.paid
 // (đơn cũ nhất trước) để công nợ hiển thị giảm đúng — không chỉ ghi phiếu thu suông.
 export const payDebt = asyncHandler(async (req, res) => {
-  const { amount, method, note } = req.body || {};
+  const { amount, method, note, bankAccountId } = req.body || {};
   if (!amount || Number(amount) <= 0) throw badRequest("Số tiền không hợp lệ");
 
   const tx = await withTransaction(async (c) => {
@@ -64,9 +64,10 @@ export const payDebt = asyncHandler(async (req, res) => {
 
     const code = await nextDocNo(c, "transaction");
     return (await c.query(
-      `INSERT INTO transactions (code, type, category, amount, method, party_type, party_id, party_name, ref_type, ref_id, note, created_by)
-       VALUES ($1,'Thu','Thu nợ khách hàng',$2,$3,'Khách hàng',$4,$5,'customer',$4,$6,$7) RETURNING *`,
-      [code, Number(amount), method || null, customer.id, customer.name, note || null, req.user.sub]
+      `INSERT INTO transactions (code, type, category, amount, method, bank_account_id, party_type, party_id, party_name, ref_type, ref_id, note, created_by)
+       VALUES ($1,'Thu','Thu nợ khách hàng',$2,$3,$4,'Khách hàng',$5,$6,'customer',$5,$7,$8) RETURNING *`,
+      [code, Number(amount), method || null, method === "Ngân hàng" ? (bankAccountId || null) : null,
+       customer.id, customer.name, note || null, req.user.sub]
     )).rows[0];
   });
   res.status(201).json(tx);

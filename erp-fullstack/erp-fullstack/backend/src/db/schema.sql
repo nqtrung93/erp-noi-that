@@ -165,7 +165,20 @@ CREATE TABLE IF NOT EXISTS order_items (
   cost_at_sale  NUMERIC(14,2) NOT NULL           -- giá vốn tại thời điểm bán
 );
 
--- ---------- Thu / chi ------------------------------------------------------
+-- ---------- Sổ quỹ (Thu / chi) + tài khoản ngân hàng -----------------------
+-- Số dư tài khoản ngân hàng KHÔNG lưu cố định — luôn tính trực tiếp lúc truy vấn
+-- = opening_balance + SUM(Thu) - SUM(Chi) của các transactions gắn bank_account_id này.
+-- Nhờ vậy mọi nghiệp vụ phát sinh tiền (thanh toán đơn hàng, thu/trả nợ...) chỉ cần
+-- gắn đúng bank_account_id vào dòng transactions là số dư tự "đồng bộ", không cần job riêng.
+CREATE TABLE IF NOT EXISTS bank_accounts (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            TEXT NOT NULL,                -- tên gợi nhớ, VD: "Vietcombank chính"
+  bank_name       TEXT,
+  account_number  TEXT,
+  opening_balance NUMERIC(14,2) NOT NULL DEFAULT 0,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS transactions (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   code          TEXT UNIQUE NOT NULL,
@@ -174,6 +187,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   amount        NUMERIC(14,2) NOT NULL,
   date          DATE NOT NULL DEFAULT now(),
   method        TEXT,
+  bank_account_id UUID REFERENCES bank_accounts(id),  -- chỉ set khi method = 'Ngân hàng'
   party_type    TEXT,                           -- Khách hàng | Nhà cung cấp | Khác
   party_id      UUID,
   party_name    TEXT,
@@ -183,6 +197,9 @@ CREATE TABLE IF NOT EXISTS transactions (
   created_by    UUID REFERENCES users(id),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Cột thêm sau cho transactions đã tồn tại từ trước khi có tính năng sổ quỹ ngân hàng.
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS bank_account_id UUID REFERENCES bank_accounts(id);
+CREATE INDEX IF NOT EXISTS idx_tx_bank_account ON transactions(bank_account_id);
 
 -- FK trễ cho ship_cost_voucher (transactions tạo sau orders trong file này)
 ALTER TABLE orders

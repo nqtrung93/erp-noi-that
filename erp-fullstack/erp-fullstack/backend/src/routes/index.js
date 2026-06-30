@@ -8,6 +8,7 @@ import * as stock from "../controllers/stock.controller.js";
 import * as supplier from "../controllers/supplier.controller.js";
 import * as customer from "../controllers/customer.controller.js";
 import * as transaction from "../controllers/transaction.controller.js";
+import * as bank from "../controllers/bank.controller.js";
 import { makeCrud } from "../controllers/crud.factory.js";
 import * as reportService from "../services/report.service.js";
 import { renderStockDocHtml, renderShipmentHtml, renderWarrantyHtml } from "../services/printDoc.service.js";
@@ -94,9 +95,9 @@ r.put("/suppliers/:id", verifyToken, requirePerm("suppliers_edit"), suppliers.up
 r.delete("/suppliers/:id", verifyToken, requirePerm("suppliers_delete"), suppliers.remove);
 r.post("/suppliers/:id/pay", verifyToken, requirePerm("suppliers_edit"), supplier.payDebt);
 
-// -------- Transactions (#15) --------
+// -------- Transactions / Sổ quỹ (#15) --------
 const transactions = makeCrud("transactions", [
-  "code", "type", "category", "amount", "date", "method",
+  "code", "type", "category", "amount", "date", "method", "bank_account_id",
   "party_type", "party_id", "party_name", "ref_type", "ref_id", "note", "created_by",
 ]);
 r.get("/transactions", verifyToken, requirePerm("finance_view"), transaction.list); // override: kèm mã đơn liên quan
@@ -104,6 +105,13 @@ r.get("/transactions/:id", verifyToken, requirePerm("finance_view"), transaction
 r.post("/transactions", verifyToken, requirePerm("finance_edit"), transaction.create); // override: tự sinh mã phiếu
 r.put("/transactions/:id", verifyToken, requirePerm("finance_edit"), transactions.update);
 r.delete("/transactions/:id", verifyToken, requirePerm("finance_delete"), transactions.remove);
+
+// -------- Tài khoản ngân hàng (số dư tính trực tiếp từ sổ quỹ, không lưu cố định) --------
+r.get("/bank-accounts", verifyToken, requirePerm("finance_view"), bank.list);
+r.post("/bank-accounts", verifyToken, requirePerm("finance_edit"), bank.create);
+r.put("/bank-accounts/:id", verifyToken, requirePerm("finance_edit"), bank.update);
+r.delete("/bank-accounts/:id", verifyToken, requirePerm("finance_delete"), bank.remove);
+r.get("/bank-accounts/:id/transactions", verifyToken, requirePerm("finance_view"), bank.transactionsForAccount);
 
 // -------- Orders (#15 + #7/#8/#9/#12) --------
 r.get("/orders", verifyToken, requirePerm("orders_view"), order.list);
