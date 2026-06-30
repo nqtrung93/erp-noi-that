@@ -349,3 +349,90 @@ export async function listOrders(filters = {}) {
   );
   return rows;
 }
+
+// Nhập đơn hàng lịch sử từ file CSV xuất ra của Haravan — CHỈ để lưu lại theo dõi doanh thu/lịch sử
+// bán hàng đã xảy ra trên Haravan, KHÔNG trừ tồn kho ERP (đặt thẳng stock_applied=true, không gọi
+// applyMovement). SKU không khớp sản phẩm có sẵn → tự tạo sản phẩm mới (giá vốn = 0, sửa lại sau).
+// ordersInput: [{ externalCode, customerName, phone, address, paymentMethod, createdAt,
+//                 items: [{ sku, qty, price, name }] }]
+export async function importHaravanOrders(ordersInput, warehouseId, actorId) {
+  const [variantRows, productRows, customerRows] = await Promise.all([
+    query(`SELECT id, product_id, sku FROM product_variants WHERE sku IS NOT NULL AND sku != ''`),
+    query(`SELECT id, sku, cost FROM products WHERE sku IS NOT NULL AND sku != ''`),
+    query(`SELECT id, phone FROM customers WHERE phone IS NOT NULL AND phone != ''`),
+  ]);
+  const skuMap = new Map();
+  for (const r of productRows.rows) skuMap.set(r.sku, { productId: r.id, variantId: null, cost: Number(r.cost) || 0 });
+  for (const r of variantRows.rows) skuMap.set(r.sku, { productId: r.product_id, variantId: r.id, cost: 0 });
+  const phoneMap = new Map();
+  for (const r of customerRows.rows) phoneMap.set(r.phone, r.id);
+
+  const result = { ordersImported: 0, ordersSkipped: 0, linesSkipped: 0, productsCreated: 0, customersCreated: 0, errors: [] };
+
+  for (const ord of ordersInput) {
+    try {
+      await withTransaction(async (c) => {
+        const resolvedItems = [];
+        for (const it of (ord.items || [])) {
+          const sku = (it.sku || "").trim();
+          if (!sku || !it.qty) { result.linesSkipped++; continue; }
+          let info = skuMap.get(sku);
+          if (!info) {
+            const codeRow = await c.query(`SELECT 'SP-' || LPAD(nextval('product_seq')::text, 6, '0') AS code`);
+            const p = (await c.query(
+              `INSERT INTO products (code, name, sku, has_variants, price, cost, options)
+               VALUES ($1,$2,$3,false,$4,0,'[]') RETURNING id`,
+              [codeRow.rows[0].code, it.name || sku, sku, Number(it.price) || 0]
+            )).rows[0];
+            info = { productId: p.id, variantId: null, cost: 0 };
+            skuMap.set(sku, info);
+            result.productsCreated++;
+          }
+          resolvedItems.push({ ...it, sku, productId: info.productId, variantId: info.variantId, cost: info.cost });
+        }
+        if (!resolvedItems.length) { result.ordersSkipped++; return; }
+
+        let customerId = null;
+        const phone = (ord.phone || "").trim();
+        if (phone) {
+          customerId = phoneMap.get(phone);
+          if (!customerId) {
+            const codeRow = await c.query(`SELECT 'KH-' || LPAD(nextval('customer_seq')::text, 6, '0') AS code`);
+            const cust = (await c.query(
+              `INSERT INTO customers (code, name, phone, address) VALUES ($1,$2,$3,$4) RETURNING id`,
+              [codeRow.rows[0].code, ord.customerName || phone, phone, ord.address || null]
+            )).rows[0];
+            customerId = cust.id;
+            phoneMap.set(phone, customerId);
+            result.customersCreated++;
+          }
+        }
+
+        const subtotal = resolvedItems.reduce((s, it) => s + Number(it.price) * Number(it.qty), 0);
+        const code = await nextDocNo(c, "orders");
+        const createdAt = ord.createdAt ? new Date(ord.createdAt) : new Date();
+        if (isNaN(createdAt.getTime())) throw new Error("Ngày đặt hàng không hợp lệ");
+
+        const orderRow = (await c.query(
+          `INSERT INTO orders (code, customer_id, warehouse_id, status, subtotal, discount, shipping, total, paid,
+             payment, delivery_method, delivery_status, stock_applied, order_source, external_order_code,
+             created_by, created_at)
+           VALUES ($1,$2,$3,'Hoàn thành',$4,0,0,$4,$4,$5,'carrier','Đã giao',true,'Haravan',$6,$7,$8) RETURNING id`,
+          [code, customerId, warehouseId, subtotal, ord.paymentMethod || null, ord.externalCode || null, actorId, createdAt]
+        )).rows[0];
+
+        for (const it of resolvedItems) {
+          await c.query(
+            `INSERT INTO order_items (order_id, product_id, variant_id, name, qty, price_at_sale, cost_at_sale)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [orderRow.id, it.productId, it.variantId, it.name || it.sku, Number(it.qty), Number(it.price) || 0, it.cost || 0]
+          );
+        }
+        result.ordersImported++;
+      });
+    } catch (e) {
+      result.errors.push({ externalCode: ord.externalCode, error: e.message });
+    }
+  }
+  return result;
+}

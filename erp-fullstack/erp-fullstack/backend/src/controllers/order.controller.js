@@ -8,6 +8,14 @@ export const list = asyncHandler(async (req, res) => {
   res.json(await orderService.listOrders({ sku: req.query.sku }));
 });
 
+// POST /api/orders/import-haravan  { warehouseId, orders: [...] } → nhập hàng loạt đơn lịch sử từ CSV Haravan
+export const importHaravan = asyncHandler(async (req, res) => {
+  const { warehouseId, orders } = req.body || {};
+  if (!warehouseId) throw badRequest("Thiếu kho");
+  if (!Array.isArray(orders) || !orders.length) throw badRequest("Không có đơn nào để nhập");
+  res.json(await orderService.importHaravanOrders(orders, warehouseId, req.user.sub));
+});
+
 export const getOne = asyncHandler(async (req, res) => {
   const o = await orderService.getOrderById(req.params.id);
   if (!o) throw notFound();

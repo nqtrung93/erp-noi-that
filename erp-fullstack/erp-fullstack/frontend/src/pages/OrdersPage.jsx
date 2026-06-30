@@ -17,6 +17,7 @@ import ProductPicker from "../components/ProductPicker.jsx";
 import { PAYMENT_METHODS } from "../utils/constants.js";
 import { buildSellableOptions } from "../utils/sellable.js";
 import { exportCsv } from "../utils/exportCsv.js";
+import { readCsvFile } from "../utils/importCsv.js";
 
 // Trang đơn hàng: tạo/sửa đơn, đổi trạng thái, theo dõi VAT, tạo phiếu thu/chi theo đơn.
 // Mọi thao tác đổi trạng thái đều gọi backend (backend trừ/hoàn tồn + kiểm quyền).
@@ -37,6 +38,7 @@ export default function OrdersPage() {
   const [payingOrder, setPayingOrder] = useState(null);
   const [viewingOrder, setViewingOrder] = useState(null);
   const [showCreateEcommerce, setShowCreateEcommerce] = useState(false);
+  const [showImportHaravan, setShowImportHaravan] = useState(false);
   const [filterSource, setFilterSource] = useState("");
   const [filterShop, setFilterShop] = useState("");
   const [filterSku, setFilterSku] = useState("");
@@ -206,6 +208,10 @@ export default function OrdersPage() {
           </button>
           {can("orders_edit") && (
             <>
+              <button onClick={() => setShowImportHaravan(true)}
+                className="border border-slate-200 text-slate-600 text-sm font-medium px-4 py-2 rounded-xl">
+                Nhập Haravan
+              </button>
               <button onClick={() => setShowCreateEcommerce(true)}
                 className="border border-teal-600 text-teal-600 text-sm font-medium px-4 py-2 rounded-xl">
                 + Tạo đơn TMĐT
@@ -266,6 +272,9 @@ export default function OrdersPage() {
           onClose={() => setShowCreateEcommerce(false)}
           onSaved={() => { setShowCreateEcommerce(false); reload(); }}
         />
+      )}
+      {showImportHaravan && (
+        <HaravanImportModal onClose={() => setShowImportHaravan(false)} onDone={() => reload()} />
       )}
       {editingOrder && (
         <OrderFormModal
@@ -905,6 +914,124 @@ function OrderFormModal({ order, onClose, onSaved, ecommerce = false }) {
 }
 
 // Tạo phiếu Thu/Chi gắn với 1 đơn hàng. Thu sẽ tự cộng vào "đã thu" của đơn (giới hạn theo tổng tiền).
+// Nhập hàng loạt đơn lịch sử từ file CSV xuất ra của Haravan — chỉ để lưu lại theo dõi doanh thu/
+// lịch sử bán hàng, KHÔNG trừ tồn kho ERP. Gom các dòng cùng "Mã đơn hàng" thành 1 đơn nhiều sản phẩm,
+// gửi lên backend theo từng lô (tránh 1 request quá lớn/quá lâu khi file có hàng nghìn đơn).
+const HARAVAN_BATCH_SIZE = 200;
+
+function groupHaravanRows(rows) {
+  const groups = new Map();
+  for (const r of rows) {
+    const rawCode = (r["Mã đơn hàng"] || "").trim();
+    if (!rawCode) continue;
+    if (!groups.has(rawCode)) {
+      groups.set(rawCode, {
+        externalCode: rawCode.replace(/^#/, ""),
+        customerName: r["Tên người nhận"] || r["Tên người thanh toán"] || "",
+        phone: (r["Số điện thoại"] || r["Số điện thoại thanh toán"] || "").trim(),
+        address: r["Địa chỉ nhận hàng"] || "",
+        paymentMethod: r["Phương thức thanh toán"] || "",
+        createdAt: r["Ngày đặt hàng"] || "",
+        items: [],
+      });
+    }
+    const g = groups.get(rawCode);
+    const sku = (r["Mã sản phẩm"] || "").trim();
+    const qty = Number(r["Số lượng sản phẩm"]) || 0;
+    const price = Number(r["Giá sản phẩm"]) || 0;
+    if (!sku || qty <= 0) continue;
+    const attr = r["Giá trị thuộc tính 1"] ? ` (${r["Giá trị thuộc tính 1"]})` : "";
+    g.items.push({ sku, qty, price, name: `${r["Tên sản phẩm"] || sku}${attr}` });
+  }
+  return Array.from(groups.values());
+}
+
+function HaravanImportModal({ onClose, onDone }) {
+  const [warehouses, setWarehouses] = useState([]);
+  const [warehouseId, setWarehouseId] = useState("");
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    warehousesService.listWarehouses().then((ws) => { setWarehouses(ws); if (ws[0]) setWarehouseId(ws[0].id); }).catch((e) => setError(e.message));
+  }, []);
+
+  async function run() {
+    if (!file) return setError("Chọn file CSV xuất từ Haravan");
+    if (!warehouseId) return setError("Chọn kho");
+    setError(""); setResult(null); setBusy(true);
+    try {
+      const rows = await readCsvFile(file);
+      const orders = groupHaravanRows(rows);
+      if (!orders.length) { setError("Không đọc được đơn nào từ file — kiểm tra lại cột \"Mã đơn hàng\"."); setBusy(false); return; }
+
+      const agg = { ordersImported: 0, ordersSkipped: 0, linesSkipped: 0, productsCreated: 0, customersCreated: 0, errors: [] };
+      for (let i = 0; i < orders.length; i += HARAVAN_BATCH_SIZE) {
+        const batch = orders.slice(i, i + HARAVAN_BATCH_SIZE);
+        setProgress(`Đang nhập ${Math.min(i + HARAVAN_BATCH_SIZE, orders.length)}/${orders.length} đơn…`);
+        const res = await ordersService.importHaravanOrders({ warehouseId, orders: batch });
+        agg.ordersImported += res.ordersImported;
+        agg.ordersSkipped += res.ordersSkipped;
+        agg.linesSkipped += res.linesSkipped;
+        agg.productsCreated += res.productsCreated;
+        agg.customersCreated += res.customersCreated;
+        agg.errors.push(...res.errors);
+      }
+      setResult(agg);
+      onDone();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+      setProgress("");
+    }
+  }
+
+  return (
+    <Modal title="Nhập đơn từ Haravan (CSV)" onClose={onClose} wide>
+      <div className="space-y-3">
+        {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
+        <p className="text-xs text-slate-500">
+          Đơn nhập từ Haravan chỉ để lưu lại theo dõi doanh thu/lịch sử bán hàng — <b>không trừ tồn kho</b> ERP.
+          Sản phẩm khớp theo Mã sản phẩm (SKU); SKU chưa có trong ERP sẽ tự tạo sản phẩm mới (giá vốn = 0, sửa lại sau).
+        </p>
+        <div>
+          <label className="text-xs text-slate-500">Kho (chỉ để ghi nhận, không trừ tồn)</label>
+          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} disabled={busy}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-slate-500">File CSV xuất từ Haravan</label>
+          <input type="file" accept=".csv" disabled={busy} onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        {progress && <p className="text-sm text-teal-600">{progress}</p>}
+        {result && (
+          <div className="bg-emerald-50 text-emerald-700 text-sm rounded-lg px-3 py-2 space-y-1">
+            <div>Đã nhập {result.ordersImported} đơn. Bỏ qua {result.ordersSkipped} đơn (không có dòng nào khớp được).</div>
+            <div>Bỏ qua {result.linesSkipped} dòng sản phẩm thiếu SKU/số lượng. Tự tạo {result.productsCreated} sản phẩm mới, {result.customersCreated} khách hàng mới.</div>
+            {result.errors.length > 0 && (
+              <div className="text-amber-700">{result.errors.length} đơn lỗi: {result.errors.slice(0, 5).map((e) => `${e.externalCode} (${e.error})`).join("; ")}{result.errors.length > 5 ? "…" : ""}</div>
+            )}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">{result ? "Đóng" : "Hủy"}</button>
+          <button type="button" onClick={run} disabled={busy || !file}
+            className="bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">
+            {busy ? "Đang nhập…" : "Nhập"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function PaymentModal({ order, bankAccounts, onClose, onSaved }) {
   const [type, setType] = useState("Thu");
   const [amount, setAmount] = useState(Math.max(Number(order.total) - Number(order.paid), 0));

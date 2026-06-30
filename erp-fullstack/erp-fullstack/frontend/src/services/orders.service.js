@@ -31,3 +31,6 @@ export const updateShipping = (id, data) => api.patch(`/orders/${id}/shipping`, 
 
 // Cập nhật trạng thái/mã hoá đơn VAT
 export const updateVat = (id, data) => api.patch(`/orders/${id}/vat`, data);
+
+// Nhập hàng loạt đơn lịch sử từ CSV Haravan (1 lô đơn đã gom nhóm theo mã đơn)
+export const importHaravanOrders = (data) => api.post("/orders/import-haravan", data);

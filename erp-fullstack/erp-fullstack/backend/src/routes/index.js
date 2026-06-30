@@ -127,6 +127,7 @@ r.post("/orders/:id/pay-ship-cost", verifyToken, requirePerm("finance_edit"), or
 r.delete("/orders/:id", verifyToken, requirePerm("orders_delete"), order.remove); // kiểm tra role Admin trong controller
 r.get("/orders/:id/invoice", verifyToken, requirePerm("orders_view"), order.invoice);
 r.get("/orders/:id/invoice/pdf", verifyToken, requirePerm("orders_view"), order.invoicePdf);
+r.post("/orders/import-haravan", verifyToken, requirePerm("orders_edit"), order.importHaravan);
 
 // -------- Carriers (đơn vị vận chuyển) --------
 const carriers = makeCrud("carriers", ["name"]);
