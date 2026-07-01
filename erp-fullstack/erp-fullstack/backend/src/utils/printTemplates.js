@@ -12,28 +12,32 @@ const A4_STYLE = `
 `;
 
 // Bộ style dùng chung cho cả 4 mẫu — đồng bộ giao diện (theo mẫu Hoá đơn/Đơn hàng) giữa các loại phiếu.
+// Màu nhấn #0d9488 (teal) khớp với màu chủ đạo của giao diện ERP (nút, tab...) để phiếu in đồng bộ
+// thương hiệu với phần mềm. tr có page-break-inside:avoid để 1 dòng sản phẩm không bị cắt ngang
+// khi bảng tràn sang trang 2 (đơn nhiều sản phẩm).
 const COMMON_STYLE = `
   body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;width:180mm;max-width:100%;margin:15mm auto;padding:0 16px;box-sizing:border-box;font-size:13px}
   .muted{color:#64748b}
   .company-header{display:flex;gap:14px;align-items:flex-start;margin-bottom:16px}
   .company-logo{height:48px;object-fit:contain}
-  .company-name{font-size:18px;font-weight:bold;margin-bottom:4px}
+  .company-name{font-size:18px;font-weight:bold;margin-bottom:4px;color:#0d9488}
   .top-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
   .doc-date{text-align:right}
-  .doc-title{font-size:18px;font-weight:bold;margin:0 0 16px}
+  .doc-title{font-size:18px;font-weight:bold;margin:0 0 16px;color:#0d9488}
   .layout{display:flex;gap:24px}
   .col-left{flex:1.6;min-width:0}
   .col-right{flex:1;min-width:0}
-  .section-title{font-weight:bold;font-size:14px;border-bottom:2px solid #2563eb;padding-bottom:6px;margin:18px 0 10px}
+  .section-title{font-weight:bold;font-size:14px;color:#0d9488;border-bottom:2px solid #0d9488;padding-bottom:6px;margin:18px 0 10px}
   table{width:100%;border-collapse:collapse}
   th,td{padding:6px 4px;font-size:12.5px;text-align:left;vertical-align:top}
   th{color:#64748b;font-weight:normal;border-bottom:1px solid #e2e8f0}
-  .box{border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-bottom:14px}
+  tr{page-break-inside:avoid}
+  .box{border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-bottom:14px;background:#f0fdfa}
   .box .field{margin-bottom:8px}
   .box .field:last-child{margin-bottom:0}
   .box .label{font-weight:bold}
   .row{display:flex;justify-content:space-between;padding:3px 0}
-  .row.total{font-weight:bold;border-top:1px solid #e2e8f0;margin-top:4px;padding-top:6px}
+  .row.total{font-weight:bold;color:#0d9488;border-top:1px solid #0d9488;margin-top:4px;padding-top:6px}
   .footer{margin-top:24px;font-size:12px;color:#64748b}
 `;
 
