@@ -114,6 +114,7 @@ function PermissionsTab() {
   const [newRole, setNewRole] = useState("");
   const [error, setError] = useState("");
   const [savingRole, setSavingRole] = useState("");
+  const [savedRole, setSavedRole] = useState(""); // hiện "Đã lưu" tạm thời sau khi lưu thành công
   const [expanded, setExpanded] = useState(""); // role đang mở rộng ma trận
 
   async function reload() {
@@ -136,9 +137,12 @@ function PermissionsTab() {
 
   async function saveRole(role) {
     setSavingRole(role);
+    setSavedRole("");
     try {
       await employeesService.setRolePermissions(role, Array.from(edits[role] || []));
       await reload();
+      setSavedRole(role);
+      setTimeout(() => setSavedRole((r) => (r === role ? "" : r)), 2500);
     } catch (e) {
       alert(e.message);
     } finally {
@@ -210,7 +214,8 @@ function PermissionsTab() {
                       ))}
                     </tbody>
                   </table>
-                  <div className="flex justify-end mt-3">
+                  <div className="flex justify-end items-center gap-2 mt-3">
+                    {savedRole === r.name && <span className="text-emerald-600 text-xs font-medium">Đã lưu ✓</span>}
                     <button onClick={() => saveRole(r.name)} disabled={savingRole === r.name}
                       className="bg-teal-600 text-white text-xs font-medium px-4 py-2 rounded-lg disabled:opacity-50">
                       {savingRole === r.name ? "Đang lưu…" : "Lưu phân quyền"}

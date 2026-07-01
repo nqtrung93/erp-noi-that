@@ -39,6 +39,10 @@ const COMMON_STYLE = `
   .row{display:flex;justify-content:space-between;padding:3px 0}
   .row.total{font-weight:bold;color:#0d9488;border-top:1px solid #0d9488;margin-top:4px;padding-top:6px}
   .footer{margin-top:24px;font-size:12px;color:#64748b}
+  .signature-row{display:flex;justify-content:space-between;margin-top:36px;text-align:center;page-break-inside:avoid}
+  .signature-row .sig-col{flex:1}
+  .signature-row .sig-title{font-weight:bold}
+  .signature-row .sig-note{color:#64748b;font-size:12px;margin-bottom:56px}
 `;
 
 export const DEFAULT_TEMPLATES = {
@@ -86,6 +90,17 @@ export const DEFAULT_TEMPLATES = {
         <div class="field">{{customerAddress}}</div>
         <div class="field">Điện thoại: {{customerPhone}}</div>
       </div>
+    </div>
+  </div>
+
+  <div class="signature-row">
+    <div class="sig-col">
+      <div class="sig-title">Khách hàng</div>
+      <div class="sig-note">(Ký, ghi rõ họ tên)</div>
+    </div>
+    <div class="sig-col">
+      <div class="sig-title">Nhân viên bán hàng</div>
+      <div class="sig-note">(Ký, ghi rõ họ tên){{staffNameLine}}</div>
     </div>
   </div>
 

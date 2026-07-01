@@ -106,5 +106,6 @@ export async function renderInvoiceHtml(orderId) {
     paymentMethod: escapeHtml(order.payment || "—"),
     shippingMethod: escapeHtml(shippingMethod),
     noteLine: order.note ? `<p class="muted">Ghi chú: ${escapeHtml(order.note)}</p>` : "",
+    staffNameLine: order.created_by_name ? `<br><b>${escapeHtml(order.created_by_name)}</b>` : "",
   });
 }
