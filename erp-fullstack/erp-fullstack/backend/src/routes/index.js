@@ -112,6 +112,9 @@ r.post("/bank-accounts", verifyToken, requirePerm("finance_edit"), bank.create);
 r.put("/bank-accounts/:id", verifyToken, requirePerm("finance_edit"), bank.update);
 r.delete("/bank-accounts/:id", verifyToken, requirePerm("finance_delete"), bank.remove);
 r.get("/bank-accounts/:id/transactions", verifyToken, requirePerm("finance_view"), bank.transactionsForAccount);
+r.get("/cash-balance", verifyToken, requirePerm("finance_view"), bank.getCashBalance);
+r.put("/cash-balance", verifyToken, requirePerm("finance_edit"), bank.setCashOpeningBalance);
+r.post("/transactions/transfer", verifyToken, requirePerm("finance_edit"), bank.transfer);
 
 // -------- Orders (#15 + #7/#8/#9/#12) --------
 r.get("/orders", verifyToken, requirePerm("orders_view"), order.list);

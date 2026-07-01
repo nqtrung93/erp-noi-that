@@ -1,5 +1,6 @@
-import { query } from "../config/db.js";
+import { query, withTransaction } from "../config/db.js";
 import { asyncHandler, badRequest, notFound } from "../utils/http.js";
+import { nextDocNo } from "../utils/docFormat.js";
 
 // Số dư KHÔNG lưu cố định — luôn tính = opening_balance + SUM(Thu) - SUM(Chi) lúc truy vấn,
 // nên mọi giao dịch (đơn hàng, công nợ, sổ quỹ) chỉ cần gắn đúng bank_account_id là tự "đồng bộ".
@@ -57,4 +58,74 @@ export const transactionsForAccount = asyncHandler(async (req, res) => {
     [req.params.id]
   );
   res.json(rows);
+});
+
+// "Tiền mặt" là 1 quỹ ảo (không có dòng riêng trong bank_accounts) — số dư tính cùng công thức
+// opening_balance + SUM(Thu) - SUM(Chi), nhưng lọc theo method='Tiền mặt' thay vì bank_account_id.
+// Số dư đầu kỳ lưu trong app_settings (key='cash_opening_balance') vì không có bảng riêng cho quỹ này.
+export const getCashBalance = asyncHandler(async (req, res) => {
+  const [openingRow, sumRow] = await Promise.all([
+    query(`SELECT value FROM app_settings WHERE key = 'cash_opening_balance'`),
+    query(
+      `SELECT
+         COALESCE(SUM(amount) FILTER (WHERE type = 'Thu'), 0) AS thu,
+         COALESCE(SUM(amount) FILTER (WHERE type = 'Chi'), 0) AS chi
+       FROM transactions WHERE method = 'Tiền mặt'`
+    ),
+  ]);
+  const openingBalance = Number(openingRow.rows[0]?.value) || 0;
+  const { thu, chi } = sumRow.rows[0];
+  res.json({ openingBalance, balance: openingBalance + Number(thu) - Number(chi) });
+});
+
+export const setCashOpeningBalance = asyncHandler(async (req, res) => {
+  const { openingBalance } = req.body || {};
+  await query(
+    `INSERT INTO app_settings (key, value) VALUES ('cash_opening_balance', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [String(Number(openingBalance) || 0)]
+  );
+  res.json({ ok: true });
+});
+
+// "Chuyển quỹ" nội bộ: ghi 1 cặp phiếu Chi (nơi đi) + Thu (nơi đến), cùng category "Chuyển quỹ nội bộ"
+// để báo cáo Sổ quỹ loại trừ khỏi Tổng thu/Tổng chi (không phải doanh thu/chi phí thật) — nhưng số dư
+// từng tài khoản/quỹ tiền mặt vẫn tính đúng vì công thức số dư luôn cộng dồn mọi dòng Thu/Chi.
+const TRANSFER_CATEGORY = "Chuyển quỹ nội bộ";
+
+export const transfer = asyncHandler(async (req, res) => {
+  const { fromBankAccountId, toBankAccountId, amount, note } = req.body || {};
+  const amt = Number(amount);
+  if (!amt || amt <= 0) throw badRequest("Số tiền không hợp lệ");
+  if ((fromBankAccountId || null) === (toBankAccountId || null)) {
+    throw badRequest("Nơi đi và nơi đến phải khác nhau");
+  }
+
+  async function resolveLabel(id) {
+    if (!id) return "Tiền mặt";
+    const { rows } = await query(`SELECT name FROM bank_accounts WHERE id = $1`, [id]);
+    if (!rows.length) throw badRequest("Tài khoản không tồn tại");
+    return rows[0].name;
+  }
+  const [fromLabel, toLabel] = await Promise.all([resolveLabel(fromBankAccountId), resolveLabel(toBankAccountId)]);
+  const transferNote = `Chuyển quỹ: ${fromLabel} → ${toLabel}${note ? ` — ${note}` : ""}`;
+
+  const result = await withTransaction(async (c) => {
+    const codeOut = await nextDocNo(c, "transaction");
+    const chiRow = (await c.query(
+      `INSERT INTO transactions (code, type, category, amount, method, bank_account_id, party_type, note, created_by)
+       VALUES ($1,'Chi',$2,$3,$4,$5,'Khác',$6,$7) RETURNING *`,
+      [codeOut, TRANSFER_CATEGORY, amt, fromBankAccountId ? "Ngân hàng" : "Tiền mặt", fromBankAccountId || null, transferNote, req.user.sub]
+    )).rows[0];
+
+    const codeIn = await nextDocNo(c, "transaction");
+    const thuRow = (await c.query(
+      `INSERT INTO transactions (code, type, category, amount, method, bank_account_id, party_type, note, created_by)
+       VALUES ($1,'Thu',$2,$3,$4,$5,'Khác',$6,$7) RETURNING *`,
+      [codeIn, TRANSFER_CATEGORY, amt, toBankAccountId ? "Ngân hàng" : "Tiền mặt", toBankAccountId || null, transferNote, req.user.sub]
+    )).rows[0];
+
+    return { chi: chiRow, thu: thuRow };
+  });
+  res.status(201).json(result);
 });

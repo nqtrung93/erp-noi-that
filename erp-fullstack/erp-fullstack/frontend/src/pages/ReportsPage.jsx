@@ -49,7 +49,7 @@ export default function ReportsPage() {
 
   const cashRows = transactions.filter((t) => {
     const d = t.created_at.slice(0, 10);
-    return (!cashFrom || d >= cashFrom) && (!cashTo || d <= cashTo);
+    return (!cashFrom || d >= cashFrom) && (!cashTo || d <= cashTo) && t.category !== "Chuyển quỹ nội bộ";
   });
   const cashThu = cashRows.filter((t) => t.type === "Thu").reduce((s, t) => s + Number(t.amount), 0);
   const cashChi = cashRows.filter((t) => t.type === "Chi").reduce((s, t) => s + Number(t.amount), 0);

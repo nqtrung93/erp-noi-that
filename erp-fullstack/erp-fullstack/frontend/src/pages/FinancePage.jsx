@@ -9,6 +9,7 @@ import Modal from "../components/Modal.jsx";
 import { exportCsv } from "../utils/exportCsv.js";
 
 const TYPE_COLOR = { Thu: "bg-emerald-100 text-emerald-700", Chi: "bg-red-100 text-red-700" };
+const TRANSFER_CATEGORY = "Chuyển quỹ nội bộ";
 const SUB_TABS = [
   { id: "ledger", label: "Sổ quỹ" },
   { id: "bank", label: "Ngân hàng" },
@@ -36,18 +37,19 @@ export default function FinancePage() {
       </div>
 
       {tab === "ledger"
-        ? <LedgerTab bankAccounts={bankAccounts} />
+        ? <LedgerTab bankAccounts={bankAccounts} onTransferred={reloadBanks} />
         : <BankTab bankAccounts={bankAccounts} onChanged={reloadBanks} />}
     </div>
   );
 }
 
 // ---------- Tab "Sổ quỹ" — danh sách phiếu thu/chi, liên kết với đơn hàng/đối tượng/tài khoản NH ----------
-function LedgerTab({ bankAccounts }) {
+function LedgerTab({ bankAccounts, onTransferred }) {
   const { can } = useAuth();
   const [transactions, setTransactions] = useState([]);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [typeFilter, setTypeFilter] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
   const [bankFilter, setBankFilter] = useState("");
@@ -67,8 +69,8 @@ function LedgerTab({ bankAccounts }) {
       t.code.toLowerCase().includes(search.toLowerCase()) ||
       (t.order_code || "").toLowerCase().includes(search.toLowerCase()));
 
-  const totalThu = filtered.filter((t) => t.type === "Thu").reduce((s, t) => s + Number(t.amount), 0);
-  const totalChi = filtered.filter((t) => t.type === "Chi").reduce((s, t) => s + Number(t.amount), 0);
+  const totalThu = filtered.filter((t) => t.type === "Thu" && t.category !== TRANSFER_CATEGORY).reduce((s, t) => s + Number(t.amount), 0);
+  const totalChi = filtered.filter((t) => t.type === "Chi" && t.category !== TRANSFER_CATEGORY).reduce((s, t) => s + Number(t.amount), 0);
 
   function exportTransactions() {
     exportCsv("so_quy.csv", [
@@ -88,9 +90,14 @@ function LedgerTab({ bankAccounts }) {
             Xuất CSV
           </button>
           {can("finance_edit") && (
-            <button onClick={() => setCreating(true)} className="bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-xl">
-              + Tạo phiếu
-            </button>
+            <>
+              <button onClick={() => setTransferring(true)} className="border border-teal-600 text-teal-600 text-sm font-medium px-4 py-2 rounded-xl">
+                Chuyển quỹ
+              </button>
+              <button onClick={() => setCreating(true)} className="bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-xl">
+                + Tạo phiếu
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -180,6 +187,9 @@ function LedgerTab({ bankAccounts }) {
 
       {creating && (
         <CreateTransactionModal bankAccounts={bankAccounts} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }} />
+      )}
+      {transferring && (
+        <TransferFundsModal bankAccounts={bankAccounts} onClose={() => setTransferring(false)} onSaved={() => { setTransferring(false); reload(); onTransferred?.(); }} />
       )}
     </div>
   );
@@ -290,6 +300,26 @@ function BankTab({ bankAccounts, onChanged }) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
+  const [cashBalance, setCashBalance] = useState(null);
+  const [editingCashOpening, setEditingCashOpening] = useState(false);
+  const [cashOpeningInput, setCashOpeningInput] = useState(0);
+  const [savingCash, setSavingCash] = useState(false);
+
+  async function reloadCash() {
+    try { setCashBalance(await bankService.getCashBalance()); } catch { /* ignore */ }
+  }
+  useEffect(() => { reloadCash(); }, []);
+
+  async function saveCashOpening(e) {
+    e.preventDefault();
+    setSavingCash(true);
+    try {
+      await bankService.setCashOpeningBalance(Number(cashOpeningInput) || 0);
+      await reloadCash();
+      setEditingCashOpening(false);
+    } catch (err) { alert(err.message); }
+    finally { setSavingCash(false); }
+  }
 
   async function remove(id) {
     if (!confirm("Xoá tài khoản ngân hàng này?")) return;
@@ -297,7 +327,7 @@ function BankTab({ bankAccounts, onChanged }) {
     catch (e) { alert(e.message); }
   }
 
-  const totalBalance = bankAccounts.reduce((s, b) => s + Number(b.balance), 0);
+  const totalBalance = bankAccounts.reduce((s, b) => s + Number(b.balance), 0) + (cashBalance ? Number(cashBalance.balance) : 0);
 
   return (
     <div className="space-y-4">
@@ -315,6 +345,27 @@ function BankTab({ bankAccounts, onChanged }) {
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* Tiền mặt — quỹ ảo, số dư tính từ transactions method='Tiền mặt' */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-teal-100">
+          <div className="font-bold text-slate-800">Tiền mặt</div>
+          <div className="text-xs text-slate-400">Quỹ tiền mặt</div>
+          <div className="text-xl font-bold text-teal-600 mt-2">{cashBalance ? fmt(cashBalance.balance) : "—"}</div>
+          {editingCashOpening ? (
+            <form onSubmit={saveCashOpening} className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100">
+              <input type="number" min="0" value={cashOpeningInput} onChange={(e) => setCashOpeningInput(e.target.value)}
+                className="border border-slate-200 rounded-lg px-2 py-1 text-xs w-28" />
+              <button type="submit" disabled={savingCash} className="text-xs text-teal-600 font-medium">{savingCash ? "…" : "Lưu"}</button>
+              <button type="button" onClick={() => setEditingCashOpening(false)} className="text-xs text-slate-400">Huỷ</button>
+            </form>
+          ) : (
+            <div className="flex gap-3 text-xs mt-3 pt-2 border-t border-slate-100">
+              {can("finance_edit") && (
+                <button onClick={() => { setCashOpeningInput(cashBalance?.openingBalance ?? 0); setEditingCashOpening(true); }}
+                  className="text-slate-600 hover:underline">Sửa số dư đầu kỳ</button>
+              )}
+            </div>
+          )}
+        </div>
         {bankAccounts.map((b) => (
           <div key={b.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
             <div className="font-bold text-slate-800">{b.name}</div>
@@ -397,6 +448,83 @@ function BankAccountModal({ account, onClose, onSaved }) {
           <button type="submit" disabled={saving}
             className="bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">
             {saving ? "Đang lưu…" : "Lưu"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function TransferFundsModal({ bankAccounts, onClose, onSaved }) {
+  const CASH_VALUE = "__cash__";
+  const [from, setFrom] = useState(CASH_VALUE);
+  const [to, setTo] = useState(bankAccounts[0]?.id || CASH_VALUE);
+  const [amount, setAmount] = useState(0);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const accountOptions = [
+    { value: CASH_VALUE, label: "Tiền mặt" },
+    ...bankAccounts.map((b) => ({ value: b.id, label: b.name + (b.bank_name ? ` (${b.bank_name})` : "") })),
+  ];
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    if (from === to) return setError("Nơi đi và nơi đến phải khác nhau");
+    if (!amount || Number(amount) <= 0) return setError("Số tiền không hợp lệ");
+    setSaving(true);
+    try {
+      await bankService.transferFunds({
+        fromBankAccountId: from === CASH_VALUE ? null : from,
+        toBankAccountId: to === CASH_VALUE ? null : to,
+        amount: Number(amount),
+        note: note || null,
+      });
+      onSaved();
+    } catch (e2) {
+      setError(e2.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Chuyển quỹ" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-slate-500">Từ</label>
+            <select value={from} onChange={(e) => setFrom(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              {accountOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Đến</label>
+            <select value={to} onChange={(e) => setTo(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              {accountOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-slate-500">Số tiền</label>
+          <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="text-xs text-slate-500">Ghi chú (tuỳ chọn)</label>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="VD: Rút tiền mặt nộp ngân hàng"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Hủy</button>
+          <button type="submit" disabled={saving}
+            className="bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-50">
+            {saving ? "Đang lưu…" : "Xác nhận chuyển"}
           </button>
         </div>
       </form>
