@@ -4,10 +4,32 @@ import { nextDocNo } from "../utils/docFormat.js";
 
 // GET /api/customers → kèm công nợ = Σ(total - paid) các đơn chưa huỷ (#README quy ước công nợ KH)
 // + overdue_days = số ngày quá hạn của đơn chưa thu LÂU NHẤT (created_at + payment_term_days), để cảnh báo.
+// page: CHỈ phân trang khi có truyền (opt-in) — danh sách khách hàng có thể lên tới hàng nghìn dòng,
+// dựng hết cùng lúc làm trình duyệt ì (#71); nơi cần mảng đầy đủ (CSV, chọn khách khi tạo đơn...) vẫn
+// gọi không kèm page và nhận về như cũ.
 export const list = asyncHandler(async (req, res) => {
+  const { search, group, page, pageSize } = req.query;
+  const params = [];
+  const conds = [];
+  if (search) {
+    params.push(`%${search}%`);
+    conds.push(`(c.name ILIKE $${params.length} OR c.phone ILIKE $${params.length})`);
+  }
+  if (group) { params.push(group); conds.push(`c.group_name = $${params.length}`); }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
+  let limitClause = "";
+  if (page) {
+    const size = Math.min(Math.max(Number(pageSize) || 50, 1), 200);
+    const offset = (Math.max(Number(page) || 1, 1) - 1) * size;
+    params.push(size, offset);
+    limitClause = `LIMIT $${params.length - 1} OFFSET $${params.length}`;
+  }
+
   const { rows } = await query(
     `SELECT c.*, COALESCE(o.debt, 0) AS debt,
             GREATEST(COALESCE(o.max_overdue_days, 0), 0) AS overdue_days
+            ${page ? ", COUNT(*) OVER() AS total_count" : ""}
        FROM customers c
        LEFT JOIN (
          SELECT customer_id, SUM(total - paid) AS debt,
@@ -17,9 +39,14 @@ export const list = asyncHandler(async (req, res) => {
           WHERE o2.status != 'Đã huỷ' AND o2.paid < o2.total
           GROUP BY customer_id
        ) o ON o.customer_id = c.id
-      ORDER BY c.created_at DESC NULLS LAST`
+       ${where}
+      ORDER BY c.created_at DESC NULLS LAST
+      ${limitClause}`,
+    params
   );
-  res.json(rows);
+  if (!page) return res.json(rows);
+  const total = rows[0] ? Number(rows[0].total_count) : 0;
+  res.json({ rows: rows.map(({ total_count, ...r }) => r), total });
 });
 
 // POST /api/customers → tự sinh mã khách hàng (KH-000001...), không nhận code từ client

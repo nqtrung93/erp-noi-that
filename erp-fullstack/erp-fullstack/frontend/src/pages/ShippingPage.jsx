@@ -19,6 +19,8 @@ const SUB_TABS = [
   { id: "carriers", label: "Đơn vị vận chuyển" },
 ];
 
+const PAGE_SIZE = 50;
+
 export default function ShippingPage() {
   const [subTab, setSubTab] = useState("orders");
   return (
@@ -52,24 +54,37 @@ function ShippingOrdersTab() {
   const [trackingSearch, setTrackingSearch] = useState("");
   const [selected, setSelected] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
-
-  async function reload() {
-    try {
-      const [os, cs] = await Promise.all([ordersService.listOrders(), carriersService.listCarriers()]);
-      setOrders(os);
-      setCarriers(cs);
-    } catch (e) { setError(e.message); }
-  }
-  useEffect(() => { reload(); }, []);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   // Mọi đơn (trừ đơn đã huỷ) đều có sẵn 1 phiếu vận chuyển ngay từ lúc tạo đơn — hiện ra đây luôn,
   // không đợi xác nhận/đã có ĐVVC, để có thể gán ĐVVC sớm ngay từ tab này nếu muốn.
-  const shippable = orders
-    .filter((o) => o.status !== "Đã huỷ")
-    .filter((o) => !filterCarrier || o.carrier === filterCarrier)
-    .filter((o) => !filterStatus || o.delivery_status === filterStatus)
-    .filter((o) => !search || o.code.toLowerCase().includes(search.toLowerCase()))
-    .filter((o) => !trackingSearch || (o.tracking_no || "").toLowerCase().includes(trackingSearch.toLowerCase()));
+  // Phân trang phía backend — danh sách này có thể lên tới hàng nghìn dòng (VD sau khi nhập Haravan),
+  // mỗi dòng lại là 1 form (nhiều input điều khiển) nên dựng hết cùng lúc làm trình duyệt treo (#71).
+  async function reload() {
+    try {
+      const [res, cs] = await Promise.all([
+        ordersService.listOrders({
+          excludeCancelled: true, page, pageSize: PAGE_SIZE,
+          ...(filterCarrier ? { carrier: filterCarrier } : {}),
+          ...(filterStatus ? { deliveryStatus: filterStatus } : {}),
+          ...(search ? { code: search } : {}),
+          ...(trackingSearch ? { trackingNo: trackingSearch } : {}),
+        }),
+        carriersService.listCarriers(),
+      ]);
+      setOrders(res.rows);
+      setTotal(res.total);
+      setCarriers(cs);
+    } catch (e) { setError(e.message); }
+  }
+  useEffect(() => {
+    const t = setTimeout(() => reload(), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterCarrier, filterStatus, search, trackingSearch, page]);
+
+  const shippable = orders; // đã lọc + phân trang ở backend
 
   function toggleSelect(id) {
     setSelected((prev) => {
@@ -129,7 +144,7 @@ function ShippingOrdersTab() {
       <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex gap-3 items-end flex-wrap">
         <div>
           <label className="text-xs text-slate-500 block mb-1">ĐVVC</label>
-          <select value={filterCarrier} onChange={(e) => setFilterCarrier(e.target.value)}
+          <select value={filterCarrier} onChange={(e) => { setFilterCarrier(e.target.value); setPage(1); }}
             className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-36">
             <option value="">Tất cả</option>
             {carriers.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
@@ -137,7 +152,7 @@ function ShippingOrdersTab() {
         </div>
         <div>
           <label className="text-xs text-slate-500 block mb-1">Trạng thái giao</label>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+          <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
             className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-36">
             <option value="">Tất cả</option>
             {Object.keys(STATUS_COLOR).map((s) => <option key={s} value={s}>{s}</option>)}
@@ -145,12 +160,12 @@ function ShippingOrdersTab() {
         </div>
         <div>
           <label className="text-xs text-slate-500 block mb-1">Mã đơn</label>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="VD: ORD-000001"
+          <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="VD: ORD-000001"
             className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-36" />
         </div>
         <div>
           <label className="text-xs text-slate-500 block mb-1">Mã vận đơn</label>
-          <input value={trackingSearch} onChange={(e) => setTrackingSearch(e.target.value)} placeholder="VD: GHTK123456"
+          <input value={trackingSearch} onChange={(e) => { setTrackingSearch(e.target.value); setPage(1); }} placeholder="VD: GHTK123456"
             className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-36" />
         </div>
       </div>
@@ -188,6 +203,20 @@ function ShippingOrdersTab() {
           <p className="text-slate-400 text-sm bg-white rounded-2xl p-6 text-center border border-slate-100">Chưa có đơn cần giao.</p>
         )}
       </div>
+
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-center gap-3 text-sm">
+          <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page <= 1}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40">
+            ‹ Trang trước
+          </button>
+          <span className="text-slate-500">Trang {page}/{Math.max(Math.ceil(total / PAGE_SIZE), 1)} · Tổng {total} đơn</span>
+          <button onClick={() => setPage((p) => (p < Math.ceil(total / PAGE_SIZE) ? p + 1 : p))} disabled={page >= Math.ceil(total / PAGE_SIZE)}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40">
+            Trang sau ›
+          </button>
+        </div>
+      )}
     </div>
   );
 }

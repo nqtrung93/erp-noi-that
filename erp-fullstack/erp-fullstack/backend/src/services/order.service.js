@@ -323,11 +323,18 @@ export async function getOrderById(id, client = { query }) {
 
 // filters.sku: lọc đơn có chứa sản phẩm/biến thể khớp SKU (dùng EXISTS để không nhân dòng đơn).
 // filters.page: CHỈ phân trang khi có truyền page (opt-in) — các nơi gọi listOrders() không cần phân
-// trang (Dashboard, CRM, Shipping, VatInvoices, Ecommerce) vẫn nhận về mảng đầy đủ như trước, không đổi.
+// trang (Dashboard, CRM, VatInvoices, Ecommerce) vẫn nhận về mảng đầy đủ như trước, không đổi.
+// filters.carrier/deliveryStatus/trackingNo/code/excludeCancelled: dùng riêng cho tab Vận chuyển.
 export async function listOrders(filters = {}) {
-  const { sku, source, shopId, from, to, page, pageSize } = filters;
+  const { sku, source, shopId, from, to, page, pageSize,
+    carrier, deliveryStatus, trackingNo, code, excludeCancelled, customerId,
+    isEcommerce, requiresVat, status } = filters;
   const params = [];
   const conds = [];
+  if (customerId) { params.push(customerId); conds.push(`o.customer_id = $${params.length}`); }
+  if (isEcommerce) { conds.push(`o.is_ecommerce = true`); }
+  if (requiresVat) { conds.push(`o.requires_vat = true`); }
+  if (status) { params.push(status); conds.push(`o.status = $${params.length}`); }
   if (sku) {
     params.push(`%${sku}%`);
     conds.push(`EXISTS (
@@ -341,6 +348,11 @@ export async function listOrders(filters = {}) {
   if (shopId) { params.push(shopId); conds.push(`o.shop_id = $${params.length}`); }
   if (from) { params.push(from); conds.push(`o.created_at >= $${params.length}`); }
   if (to) { params.push(to); conds.push(`o.created_at <= $${params.length}::date + 1`); }
+  if (code) { params.push(`%${code}%`); conds.push(`o.code ILIKE $${params.length}`); }
+  if (carrier) { params.push(carrier); conds.push(`sh.carrier = $${params.length}`); }
+  if (deliveryStatus) { params.push(deliveryStatus); conds.push(`sh.delivery_status = $${params.length}`); }
+  if (trackingNo) { params.push(`%${trackingNo}%`); conds.push(`sh.tracking_no ILIKE $${params.length}`); }
+  if (excludeCancelled) { conds.push(`o.status != 'Đã huỷ'`); }
   const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
 
   let limitClause = "";

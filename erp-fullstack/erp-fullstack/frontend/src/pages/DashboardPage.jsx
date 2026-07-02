@@ -9,21 +9,29 @@ export default function DashboardPage() {
   const { can } = useAuth();
   const [profit, setProfit] = useState(null);
   const [inventory, setInventory] = useState([]);
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState([]); // chỉ 5 đơn gần nhất — xem "Đơn hàng gần đây" bên dưới
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [pendingOrders, setPendingOrders] = useState(0);
   const [error, setError] = useState("");
 
+  // Chỉ lấy 5 đơn gần nhất + tổng số (qua total_count phân trang) thay vì tải hết toàn bộ đơn hàng
+  // (có thể lên tới hàng nghìn dòng) chỉ để đếm/lấy 5 dòng đầu.
   useEffect(() => {
     Promise.all([
       can("view_revenue") ? reportsService.profitReport() : Promise.resolve(null),
       can("reports") ? reportsService.inventoryReport() : Promise.resolve([]),
-      ordersService.listOrders(),
+      ordersService.listOrders({ page: 1, pageSize: 5 }),
+      ordersService.listOrders({ page: 1, pageSize: 1, status: "Chờ xác nhận" }),
     ])
-      .then(([p, inv, os]) => { setProfit(p); setInventory(inv); setOrders(os); })
+      .then(([p, inv, recent, pending]) => {
+        setProfit(p); setInventory(inv);
+        setOrders(recent.rows); setTotalOrders(recent.total);
+        setPendingOrders(pending.total);
+      })
       .catch((e) => setError(e.message));
   }, []);
 
   const stockValue = inventory.reduce((s, i) => s + Number(i.stock_value || 0), 0);
-  const pendingOrders = orders.filter((o) => o.status === "Chờ xác nhận").length;
 
   return (
     <div className="space-y-4">
@@ -31,7 +39,7 @@ export default function DashboardPage() {
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-3 py-2">{error}</div>}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard icon="🧾" label="Tổng đơn hàng" value={orders.length} color="bg-blue-50" />
+        <StatCard icon="🧾" label="Tổng đơn hàng" value={totalOrders} color="bg-blue-50" />
         <StatCard icon="⏳" label="Chờ xác nhận" value={pendingOrders} color="bg-amber-50" />
         {profit && (
           <>
@@ -48,7 +56,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
           <div className="font-bold text-slate-800 mb-2">Đơn hàng gần đây</div>
           <div className="divide-y divide-slate-100">
-            {orders.slice(0, 5).map((o) => (
+            {orders.map((o) => (
               <div key={o.id} className="flex justify-between py-2 text-sm">
                 <span className="text-slate-600">{o.code}</span>
                 <span className="font-medium text-slate-800">{fmt(o.total)}</span>

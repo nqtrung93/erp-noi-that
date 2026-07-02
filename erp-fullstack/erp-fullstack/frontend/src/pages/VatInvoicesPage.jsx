@@ -18,13 +18,12 @@ export default function VatInvoicesPage() {
   const [vatStatusFilter, setVatStatusFilter] = useState("");
 
   async function reload() {
-    try { setOrders(await ordersService.listOrders()); }
+    try { setOrders(await ordersService.listOrders({ requiresVat: true })); }
     catch (e) { setError(e.message); }
   }
   useEffect(() => { reload(); }, []);
 
   const vatOrders = orders
-    .filter((o) => o.requires_vat)
     .filter((o) => !statusFilter || o.status === statusFilter)
     .filter((o) => !vatStatusFilter || (o.vat_invoice_status || "Chưa xuất") === vatStatusFilter);
 

@@ -20,8 +20,8 @@ export default function EcommercePage() {
 
   async function reload() {
     try {
-      const [os, ss] = await Promise.all([ordersService.listOrders(), shopsService.listShops()]);
-      setOrders(os.filter((o) => o.is_ecommerce));
+      const [os, ss] = await Promise.all([ordersService.listOrders({ isEcommerce: true }), shopsService.listShops()]);
+      setOrders(os);
       setShops(ss);
     } catch (e) { setError(e.message); }
   }

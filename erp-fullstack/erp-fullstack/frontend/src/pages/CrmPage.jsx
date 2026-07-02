@@ -15,6 +15,7 @@ const STATUS_COLOR = {
   "Hoàn thành": "bg-emerald-100 text-emerald-700",
   "Đã huỷ": "bg-red-100 text-red-700",
 };
+const PAGE_SIZE = 50;
 
 export default function CrmPage() {
   const { can } = useAuth();
@@ -26,15 +27,31 @@ export default function CrmPage() {
   const [viewing, setViewing] = useState(null);
   const [filterGroup, setFilterGroup] = useState("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
+  // Phân trang phía backend — danh sách khách hàng có thể lên tới hàng nghìn dòng (VD sau khi nhập
+  // Haravan), dựng hết cùng lúc làm trình duyệt ì dần (#71).
   async function reload() {
     try {
-      const [cs, gs] = await Promise.all([customersService.listCustomers(), customersService.listCustomerGroups()]);
-      setCustomers(cs);
+      const [res, gs] = await Promise.all([
+        customersService.listCustomers({
+          page, pageSize: PAGE_SIZE,
+          ...(search ? { search } : {}),
+          ...(filterGroup ? { group: filterGroup } : {}),
+        }),
+        customersService.listCustomerGroups(),
+      ]);
+      setCustomers(res.rows);
+      setTotal(res.total);
       setGroups(gs);
     } catch (e) { setError(e.message); }
   }
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    const t = setTimeout(() => reload(), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filterGroup, page]);
 
   async function remove(id) {
     if (!confirm("Xoá khách hàng này?")) return;
@@ -42,7 +59,15 @@ export default function CrmPage() {
     catch (e) { alert(e.message); }
   }
 
-  function exportCustomers() {
+  // Xuất CSV lấy TOÀN BỘ khách khớp bộ lọc hiện tại (không giới hạn theo trang đang xem).
+  async function exportCustomers() {
+    let all;
+    try {
+      all = await customersService.listCustomers({
+        ...(search ? { search } : {}),
+        ...(filterGroup ? { group: filterGroup } : {}),
+      });
+    } catch (e) { return setError(e.message); }
     exportCsv("khach_hang.csv", [
       { key: "code", label: "Mã KH" },
       { key: "name", label: "Tên" },
@@ -51,7 +76,7 @@ export default function CrmPage() {
       { key: "address", label: "Địa chỉ" },
       { key: "group_name", label: "Nhóm khách" },
       { key: "debt", label: "Công nợ" },
-    ], customers);
+    ], all);
   }
 
   return (
@@ -74,13 +99,13 @@ export default function CrmPage() {
       <div className="flex flex-wrap gap-3">
         <div>
           <label className="text-xs text-slate-500 block mb-1">Tìm khách hàng</label>
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
+          <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Tìm theo tên hoặc số điện thoại…"
             className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-64" />
         </div>
         <div>
           <label className="text-xs text-slate-500 block mb-1">Nhóm khách hàng</label>
-          <select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)}
+          <select value={filterGroup} onChange={(e) => { setFilterGroup(e.target.value); setPage(1); }}
             className="border border-slate-200 rounded-lg px-3 py-2 text-sm">
             <option value="">Tất cả</option>
             {groups.map((g) => <option key={g} value={g}>{g}</option>)}
@@ -89,14 +114,7 @@ export default function CrmPage() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 divide-y divide-slate-100">
-        {customers
-          .filter((c) => !filterGroup || c.group_name === filterGroup)
-          .filter((c) => {
-            const q = search.trim().toLowerCase();
-            if (!q) return true;
-            return c.name.toLowerCase().includes(q) || (c.phone || "").toLowerCase().includes(q);
-          })
-          .map((c) => (
+        {customers.map((c) => (
           <div key={c.id} className="flex items-center justify-between px-4 py-3">
             <div>
               <div className="font-bold text-slate-800">{c.name} <span className="text-xs font-normal text-slate-400">{c.code}</span></div>
@@ -124,6 +142,20 @@ export default function CrmPage() {
         ))}
         {customers.length === 0 && <p className="text-slate-400 text-sm p-4">Chưa có khách hàng.</p>}
       </div>
+
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-center gap-3 text-sm">
+          <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page <= 1}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40">
+            ‹ Trang trước
+          </button>
+          <span className="text-slate-500">Trang {page}/{Math.max(Math.ceil(total / PAGE_SIZE), 1)} · Tổng {total} khách hàng</span>
+          <button onClick={() => setPage((p) => (p < Math.ceil(total / PAGE_SIZE) ? p + 1 : p))} disabled={page >= Math.ceil(total / PAGE_SIZE)}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40">
+            Trang sau ›
+          </button>
+        </div>
+      )}
 
       {editing !== null && (
         <CustomerModal
@@ -153,8 +185,8 @@ function CustomerDetailModal({ customer, onClose }) {
   const [agingThreshold, setAgingThreshold] = useState(30); // mốc số ngày tách "quá hạn ít" / "quá hạn nhiều" — tự đổi được
 
   useEffect(() => {
-    ordersService.listOrders()
-      .then((all) => setOrders(all.filter((o) => o.customer_id === customer.id)))
+    ordersService.listOrders({ customerId: customer.id })
+      .then(setOrders)
       .catch((e) => setError(e.message));
   }, [customer.id]);
 

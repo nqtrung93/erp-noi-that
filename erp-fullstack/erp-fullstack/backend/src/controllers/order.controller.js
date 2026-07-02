@@ -5,8 +5,14 @@ import { asyncHandler, badRequest, notFound, forbidden } from "../utils/http.js"
 import { htmlToPdfBuffer, toFileSlug, sendPdf } from "../utils/pdf.js";
 
 export const list = asyncHandler(async (req, res) => {
-  const { sku, source, shopId, from, to, page, pageSize } = req.query;
-  res.json(await orderService.listOrders({ sku, source, shopId, from, to, page, pageSize }));
+  const { sku, source, shopId, from, to, page, pageSize,
+    carrier, deliveryStatus, trackingNo, code, excludeCancelled, customerId,
+    isEcommerce, requiresVat, status } = req.query;
+  res.json(await orderService.listOrders({
+    sku, source, shopId, from, to, page, pageSize,
+    carrier, deliveryStatus, trackingNo, code, excludeCancelled, customerId,
+    isEcommerce, requiresVat, status,
+  }));
 });
 
 // POST /api/orders/import-haravan  { warehouseId, orders: [...] } → nhập hàng loạt đơn lịch sử từ CSV Haravan
