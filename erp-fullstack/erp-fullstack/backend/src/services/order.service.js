@@ -1,4 +1,4 @@
-import { withTransaction, query } from "../config/db.js";
+import { withTransaction, query, pool } from "../config/db.js";
 import { assertEnoughStock, applyMovement, hasEnoughStock } from "./stock.service.js";
 import { badRequest, notFound } from "../utils/http.js";
 import { nextDocNo } from "../utils/docFormat.js";
@@ -369,17 +369,27 @@ export async function importHaravanOrders(ordersInput, warehouseId, actorId) {
 
   const result = { ordersImported: 0, ordersSkipped: 0, linesSkipped: 0, productsCreated: 0, customersCreated: 0, errors: [] };
 
-  for (const ord of ordersInput) {
-    try {
-      await withTransaction(async (c) => {
+  // Gộp cả batch vào 1 transaction (SAVEPOINT riêng từng đơn thay vì BEGIN/COMMIT riêng) —
+  // COMMIT của Postgres phải fsync xuống đĩa, mở/đóng transaction riêng cho từng đơn (hàng trăm đơn/lần
+  // nhập) là nguyên nhân chính gây lag. SAVEPOINT vẫn đảm bảo 1 đơn lỗi không ảnh hưởng các đơn khác.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    let sp = 0;
+    for (const ord of ordersInput) {
+      sp++;
+      const spName = `haravan_${sp}`;
+      try {
+        await client.query(`SAVEPOINT ${spName}`);
+
         const resolvedItems = [];
         for (const it of (ord.items || [])) {
           const sku = (it.sku || "").trim();
           if (!sku || !it.qty) { result.linesSkipped++; continue; }
           let info = skuMap.get(sku);
           if (!info) {
-            const codeRow = await c.query(`SELECT 'SP-' || LPAD(nextval('product_seq')::text, 6, '0') AS code`);
-            const p = (await c.query(
+            const codeRow = await client.query(`SELECT 'SP-' || LPAD(nextval('product_seq')::text, 6, '0') AS code`);
+            const p = (await client.query(
               `INSERT INTO products (code, name, sku, has_variants, price, cost, options)
                VALUES ($1,$2,$3,false,$4,0,'[]') RETURNING id`,
               [codeRow.rows[0].code, it.name || sku, sku, Number(it.price) || 0]
@@ -390,15 +400,19 @@ export async function importHaravanOrders(ordersInput, warehouseId, actorId) {
           }
           resolvedItems.push({ ...it, sku, productId: info.productId, variantId: info.variantId, cost: info.cost });
         }
-        if (!resolvedItems.length) { result.ordersSkipped++; return; }
+        if (!resolvedItems.length) {
+          result.ordersSkipped++;
+          await client.query(`RELEASE SAVEPOINT ${spName}`);
+          continue;
+        }
 
         let customerId = null;
         const phone = (ord.phone || "").trim();
         if (phone) {
           customerId = phoneMap.get(phone);
           if (!customerId) {
-            const codeRow = await c.query(`SELECT 'KH-' || LPAD(nextval('customer_seq')::text, 6, '0') AS code`);
-            const cust = (await c.query(
+            const codeRow = await client.query(`SELECT 'KH-' || LPAD(nextval('customer_seq')::text, 6, '0') AS code`);
+            const cust = (await client.query(
               `INSERT INTO customers (code, name, phone, address) VALUES ($1,$2,$3,$4) RETURNING id`,
               [codeRow.rows[0].code, ord.customerName || phone, phone, ord.address || null]
             )).rows[0];
@@ -409,11 +423,11 @@ export async function importHaravanOrders(ordersInput, warehouseId, actorId) {
         }
 
         const subtotal = resolvedItems.reduce((s, it) => s + Number(it.price) * Number(it.qty), 0);
-        const code = await nextDocNo(c, "orders");
+        const code = await nextDocNo(client, "orders");
         const createdAt = ord.createdAt ? new Date(ord.createdAt) : new Date();
         if (isNaN(createdAt.getTime())) throw new Error("Ngày đặt hàng không hợp lệ");
 
-        const orderRow = (await c.query(
+        const orderRow = (await client.query(
           `INSERT INTO orders (code, customer_id, warehouse_id, status, subtotal, discount, shipping, total, paid,
              payment, delivery_method, delivery_status, stock_applied, order_source, external_order_code,
              created_by, created_at)
@@ -421,18 +435,33 @@ export async function importHaravanOrders(ordersInput, warehouseId, actorId) {
           [code, customerId, warehouseId, subtotal, ord.paymentMethod || null, ord.externalCode || null, actorId, createdAt]
         )).rows[0];
 
-        for (const it of resolvedItems) {
-          await c.query(
-            `INSERT INTO order_items (order_id, product_id, variant_id, name, qty, price_at_sale, cost_at_sale)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [orderRow.id, it.productId, it.variantId, it.name || it.sku, Number(it.qty), Number(it.price) || 0, it.cost || 0]
-          );
-        }
+        // Gộp toàn bộ dòng sản phẩm của đơn thành 1 câu INSERT nhiều dòng thay vì lặp từng dòng.
+        const values = [];
+        const params = [];
+        resolvedItems.forEach((it, idx) => {
+          const b = idx * 7;
+          values.push(`($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7})`);
+          params.push(orderRow.id, it.productId, it.variantId, it.name || it.sku, Number(it.qty), Number(it.price) || 0, it.cost || 0);
+        });
+        await client.query(
+          `INSERT INTO order_items (order_id, product_id, variant_id, name, qty, price_at_sale, cost_at_sale)
+           VALUES ${values.join(",")}`,
+          params
+        );
+
         result.ordersImported++;
-      });
-    } catch (e) {
-      result.errors.push({ externalCode: ord.externalCode, error: e.message });
+        await client.query(`RELEASE SAVEPOINT ${spName}`);
+      } catch (e) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${spName}`);
+        result.errors.push({ externalCode: ord.externalCode, error: e.message });
+      }
     }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
   }
   return result;
 }
