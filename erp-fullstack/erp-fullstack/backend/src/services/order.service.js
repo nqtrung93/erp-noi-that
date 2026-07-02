@@ -322,32 +322,52 @@ export async function getOrderById(id, client = { query }) {
 }
 
 // filters.sku: lọc đơn có chứa sản phẩm/biến thể khớp SKU (dùng EXISTS để không nhân dòng đơn).
+// filters.page: CHỈ phân trang khi có truyền page (opt-in) — các nơi gọi listOrders() không cần phân
+// trang (Dashboard, CRM, Shipping, VatInvoices, Ecommerce) vẫn nhận về mảng đầy đủ như trước, không đổi.
 export async function listOrders(filters = {}) {
-  const { sku } = filters;
+  const { sku, source, shopId, from, to, page, pageSize } = filters;
   const params = [];
-  let where = "";
+  const conds = [];
   if (sku) {
     params.push(`%${sku}%`);
-    where = `WHERE EXISTS (
+    conds.push(`EXISTS (
       SELECT 1 FROM order_items oi
         LEFT JOIN products p ON p.id = oi.product_id
         LEFT JOIN product_variants v ON v.id = oi.variant_id
-       WHERE oi.order_id = o.id AND (p.sku ILIKE $1 OR v.sku ILIKE $1 OR p.code ILIKE $1)
-    )`;
+       WHERE oi.order_id = o.id AND (p.sku ILIKE $${params.length} OR v.sku ILIKE $${params.length} OR p.code ILIKE $${params.length})
+    )`);
   }
+  if (source) { params.push(source); conds.push(`o.order_source = $${params.length}`); }
+  if (shopId) { params.push(shopId); conds.push(`o.shop_id = $${params.length}`); }
+  if (from) { params.push(from); conds.push(`o.created_at >= $${params.length}`); }
+  if (to) { params.push(to); conds.push(`o.created_at <= $${params.length}::date + 1`); }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
+  let limitClause = "";
+  if (page) {
+    const size = Math.min(Math.max(Number(pageSize) || 50, 1), 200);
+    const offset = (Math.max(Number(page) || 1, 1) - 1) * size;
+    params.push(size, offset);
+    limitClause = `LIMIT $${params.length - 1} OFFSET $${params.length}`;
+  }
+
   const { rows } = await query(
     `SELECT o.*, c.name AS customer_name, c.payment_term_days AS customer_payment_term_days,
             s.name AS shop_name, u.name AS created_by_name, ${SHIPMENT_OVERRIDE_COLS}
+            ${page ? ", COUNT(*) OVER() AS total_count" : ""}
        FROM orders o
        LEFT JOIN customers c ON c.id = o.customer_id
        LEFT JOIN shops s ON s.id = o.shop_id
        LEFT JOIN users u ON u.id = o.created_by
        LEFT JOIN shipments sh ON sh.order_id = o.id
        ${where}
-      ORDER BY o.created_at DESC`,
+      ORDER BY o.created_at DESC
+      ${limitClause}`,
     params
   );
-  return rows;
+  if (!page) return rows;
+  const total = rows[0] ? Number(rows[0].total_count) : 0;
+  return { rows: rows.map(({ total_count, ...r }) => r), total };
 }
 
 // Nhập đơn hàng lịch sử từ file CSV xuất ra của Haravan — CHỈ để lưu lại theo dõi doanh thu/lịch sử

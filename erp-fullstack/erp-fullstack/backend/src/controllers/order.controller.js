@@ -5,7 +5,8 @@ import { asyncHandler, badRequest, notFound, forbidden } from "../utils/http.js"
 import { htmlToPdfBuffer, toFileSlug, sendPdf } from "../utils/pdf.js";
 
 export const list = asyncHandler(async (req, res) => {
-  res.json(await orderService.listOrders({ sku: req.query.sku }));
+  const { sku, source, shopId, from, to, page, pageSize } = req.query;
+  res.json(await orderService.listOrders({ sku, source, shopId, from, to, page, pageSize }));
 });
 
 // POST /api/orders/import-haravan  { warehouseId, orders: [...] } → nhập hàng loạt đơn lịch sử từ CSV Haravan

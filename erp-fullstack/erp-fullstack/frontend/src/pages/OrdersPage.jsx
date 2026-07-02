@@ -28,6 +28,7 @@ const STATUS_COLOR = {
   "Đã huỷ": "bg-red-100 text-red-700",
 };
 const VAT_COLOR = { "Chưa xuất": "bg-amber-100 text-amber-700", "Đã xuất": "bg-emerald-100 text-emerald-700" };
+const PAGE_SIZE = 50;
 
 export default function OrdersPage() {
   const { can, user } = useAuth();
@@ -49,32 +50,43 @@ export default function OrdersPage() {
   const [bankAccounts, setBankAccounts] = useState([]);
   const [selected, setSelected] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
-  async function reload(sku = filterSku) {
-    try { setOrders(await ordersService.listOrders(sku ? { sku } : {})); }
-    catch (e) { setError(e.message); }
+  function currentFilters() {
+    const f = {};
+    if (filterSku) f.sku = filterSku;
+    if (filterSource) f.source = filterSource;
+    if (filterShop) f.shopId = filterShop;
+    if (filterFrom) f.from = filterFrom;
+    if (filterTo) f.to = filterTo;
+    return f;
+  }
+
+  // Phân trang phía backend — trang list đơn hàng có thể lên tới hàng nghìn dòng (VD sau khi nhập
+  // Haravan), dựng hết cùng lúc (bảng desktop + card mobile) làm trình duyệt treo (#71).
+  async function reload() {
+    try {
+      const res = await ordersService.listOrders({ ...currentFilters(), page, pageSize: PAGE_SIZE });
+      setOrders(res.rows);
+      setTotal(res.total);
+    } catch (e) { setError(e.message); }
   }
   useEffect(() => {
-    reload();
     orderSourcesService.listOrderSources().then(setSources).catch(() => {});
     shopsService.listShops().then(setShops).catch(() => {});
     bankService.listBankAccounts().then(setBankAccounts).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Lọc theo SKU gọi lại API (backend tìm trong order_items) — debounce nhẹ để tránh gọi liên tục khi gõ.
+  // Debounce nhẹ (chủ yếu để gõ SKU mượt hơn) rồi tải lại theo mọi bộ lọc + trang hiện tại.
   useEffect(() => {
-    const t = setTimeout(() => reload(filterSku), 300);
+    const t = setTimeout(() => reload(), 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterSku]);
+  }, [filterSource, filterShop, filterSku, filterFrom, filterTo, page]);
 
-  const filteredOrders = orders.filter((o) => {
-    const d = o.created_at?.slice(0, 10);
-    return (!filterSource || o.order_source === filterSource) &&
-      (!filterShop || o.shop_id === filterShop) &&
-      (!filterFrom || d >= filterFrom) &&
-      (!filterTo || d <= filterTo);
-  });
+  const filteredOrders = orders; // đã lọc + phân trang ở backend
 
   function toggleSelect(id) {
     setSelected((prev) => {
@@ -174,7 +186,11 @@ export default function OrdersPage() {
     catch (e) { alert(e.message); }
   }
 
-  function exportOrders() {
+  // Xuất CSV lấy TOÀN BỘ đơn khớp bộ lọc hiện tại (không giới hạn theo trang đang xem).
+  async function exportOrders() {
+    let all;
+    try { all = await ordersService.listOrders(currentFilters()); }
+    catch (e) { return setError(e.message); }
     exportCsv("don_hang.csv", [
       { key: "code", label: "Mã đơn" },
       { key: "customer_name", label: "Khách hàng" },
@@ -195,7 +211,7 @@ export default function OrdersPage() {
       { key: "vat_invoice_no", label: "Số HĐ VAT" },
       { key: "cancel_reason", label: "Lý do huỷ" },
       { key: "note", label: "Ghi chú" },
-    ], filteredOrders);
+    ], all);
   }
 
   return (
@@ -229,7 +245,7 @@ export default function OrdersPage() {
       <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex gap-3 items-end flex-wrap">
         <div className="flex-1 min-w-[140px] sm:flex-none">
           <label className="text-xs text-slate-500 block mb-1">Nguồn đơn</label>
-          <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)}
+          <select value={filterSource} onChange={(e) => { setFilterSource(e.target.value); setPage(1); }}
             className="w-full sm:w-40 border border-slate-200 rounded-lg px-3 py-2 text-sm">
             <option value="">Tất cả</option>
             {sources.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
@@ -237,7 +253,7 @@ export default function OrdersPage() {
         </div>
         <div className="flex-1 min-w-[140px] sm:flex-none">
           <label className="text-xs text-slate-500 block mb-1">Shop TMĐT</label>
-          <select value={filterShop} onChange={(e) => setFilterShop(e.target.value)}
+          <select value={filterShop} onChange={(e) => { setFilterShop(e.target.value); setPage(1); }}
             className="w-full sm:w-40 border border-slate-200 rounded-lg px-3 py-2 text-sm">
             <option value="">Tất cả</option>
             {shops.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -245,17 +261,17 @@ export default function OrdersPage() {
         </div>
         <div className="flex-1 min-w-[140px] sm:flex-none">
           <label className="text-xs text-slate-500 block mb-1">SKU sản phẩm</label>
-          <input value={filterSku} onChange={(e) => setFilterSku(e.target.value)} placeholder="VD: SP-000001"
+          <input value={filterSku} onChange={(e) => { setFilterSku(e.target.value); setPage(1); }} placeholder="VD: SP-000001"
             className="w-full sm:w-40 border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="flex-1 min-w-[140px] sm:flex-none">
           <label className="text-xs text-slate-500 block mb-1">Từ ngày</label>
-          <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)}
+          <input type="date" value={filterFrom} onChange={(e) => { setFilterFrom(e.target.value); setPage(1); }}
             className="w-full sm:w-40 border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="flex-1 min-w-[140px] sm:flex-none">
           <label className="text-xs text-slate-500 block mb-1">Đến ngày</label>
-          <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)}
+          <input type="date" value={filterTo} onChange={(e) => { setFilterTo(e.target.value); setPage(1); }}
             className="w-full sm:w-40 border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
@@ -496,6 +512,20 @@ export default function OrdersPage() {
           <p className="text-slate-400 text-sm bg-white rounded-2xl p-6 text-center border border-slate-100">Chưa có đơn hàng.</p>
         )}
       </div>
+
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-center gap-3 text-sm">
+          <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page <= 1}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40">
+            ‹ Trang trước
+          </button>
+          <span className="text-slate-500">Trang {page}/{Math.max(Math.ceil(total / PAGE_SIZE), 1)} · Tổng {total} đơn</span>
+          <button onClick={() => setPage((p) => (p < Math.ceil(total / PAGE_SIZE) ? p + 1 : p))} disabled={page >= Math.ceil(total / PAGE_SIZE)}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40">
+            Trang sau ›
+          </button>
+        </div>
+      )}
     </div>
   );
 }
