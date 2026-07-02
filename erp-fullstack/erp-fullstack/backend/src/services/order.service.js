@@ -423,7 +423,9 @@ export async function importHaravanOrders(ordersInput, warehouseId, actorId) {
         }
 
         const subtotal = resolvedItems.reduce((s, it) => s + Number(it.price) * Number(it.qty), 0);
-        const code = await nextDocNo(client, "orders");
+        // Đơn Haravan hiển thị theo số phiếu Haravan, không sinh số theo hệ thống ERP.
+        const code = (ord.externalCode || "").trim();
+        if (!code) throw new Error("Thiếu mã đơn Haravan");
         const createdAt = ord.createdAt ? new Date(ord.createdAt) : new Date();
         if (isNaN(createdAt.getTime())) throw new Error("Ngày đặt hàng không hợp lệ");
 
@@ -453,9 +455,9 @@ export async function importHaravanOrders(ordersInput, warehouseId, actorId) {
         await client.query(`RELEASE SAVEPOINT ${spName}`);
       } catch (e) {
         await client.query(`ROLLBACK TO SAVEPOINT ${spName}`);
-        // 23505 (unique_violation) trên external_order_code = đơn này đã nhập trước đó (file/khoảng ngày
-        // export chồng lấn) — không phải lỗi thật, chỉ bỏ qua để không nhập trùng.
-        if (e.code === "23505" && e.constraint === "idx_orders_external_code") {
+        // 23505 (unique_violation) trên code hoặc external_order_code = đơn này đã nhập trước đó (file/khoảng
+        // ngày export chồng lấn) — không phải lỗi thật, chỉ bỏ qua để không nhập trùng.
+        if (e.code === "23505" && (e.constraint === "idx_orders_external_code" || e.constraint === "orders_code_key")) {
           result.ordersDuplicate++;
         } else {
           result.errors.push({ externalCode: ord.externalCode, error: e.message });

@@ -397,3 +397,8 @@ CREATE INDEX IF NOT EXISTS idx_orders_warehouse ON orders(warehouse_id);
 -- Chặn nhập trùng đơn Haravan (import lại cùng file/khoảng ngày export chồng lấn) — chỉ áp dụng
 -- cho đơn có external_order_code (đơn tạo tay trong ERP có giá trị NULL nên không bị ảnh hưởng).
 CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_external_code ON orders(external_order_code) WHERE external_order_code IS NOT NULL;
+
+-- Đơn Haravan hiển thị theo số phiếu Haravan thay vì mã hệ thống (PBH-xxxxxx) — backfill cho các đơn
+-- đã nhập trước khi có thay đổi này. Vô hại khi chạy lại (code đã = external_order_code thì WHERE false).
+UPDATE orders SET code = external_order_code
+  WHERE order_source = 'Haravan' AND external_order_code IS NOT NULL AND code != external_order_code;

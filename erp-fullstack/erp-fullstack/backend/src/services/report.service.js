@@ -4,7 +4,9 @@ import { query } from "../config/db.js";
 // LUÔN dùng cost_at_sale đã chốt lúc bán, KHÔNG dùng products.cost hiện tại.
 export async function profitReport({ from, to, shopId, source } = {}) {
   const params = [];
-  let where = `o.status = 'Hoàn thành'`;
+  // Đơn Haravan chỉ nhập để theo dõi lịch sử/bảo hành khi chuyển sàn — không tính vào doanh thu ERP
+  // (tránh trùng với doanh thu đã ghi nhận bên Haravan lúc bán).
+  let where = `o.status = 'Hoàn thành' AND o.order_source != 'Haravan'`;
   if (from) { params.push(from); where += ` AND o.created_at >= $${params.length}`; }
   if (to) { params.push(to); where += ` AND o.created_at <= $${params.length}`; }
   if (shopId) { params.push(shopId); where += ` AND o.shop_id = $${params.length}`; }
