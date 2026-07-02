@@ -367,7 +367,7 @@ export async function importHaravanOrders(ordersInput, warehouseId, actorId) {
   const phoneMap = new Map();
   for (const r of customerRows.rows) phoneMap.set(r.phone, r.id);
 
-  const result = { ordersImported: 0, ordersSkipped: 0, linesSkipped: 0, productsCreated: 0, customersCreated: 0, errors: [] };
+  const result = { ordersImported: 0, ordersSkipped: 0, ordersDuplicate: 0, linesSkipped: 0, productsCreated: 0, customersCreated: 0, errors: [] };
 
   // Gộp cả batch vào 1 transaction (SAVEPOINT riêng từng đơn thay vì BEGIN/COMMIT riêng) —
   // COMMIT của Postgres phải fsync xuống đĩa, mở/đóng transaction riêng cho từng đơn (hàng trăm đơn/lần
@@ -453,7 +453,13 @@ export async function importHaravanOrders(ordersInput, warehouseId, actorId) {
         await client.query(`RELEASE SAVEPOINT ${spName}`);
       } catch (e) {
         await client.query(`ROLLBACK TO SAVEPOINT ${spName}`);
-        result.errors.push({ externalCode: ord.externalCode, error: e.message });
+        // 23505 (unique_violation) trên external_order_code = đơn này đã nhập trước đó (file/khoảng ngày
+        // export chồng lấn) — không phải lỗi thật, chỉ bỏ qua để không nhập trùng.
+        if (e.code === "23505" && e.constraint === "idx_orders_external_code") {
+          result.ordersDuplicate++;
+        } else {
+          result.errors.push({ externalCode: ord.externalCode, error: e.message });
+        }
       }
     }
     await client.query("COMMIT");

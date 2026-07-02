@@ -382,3 +382,18 @@ INSERT INTO role_permissions(role, permission)
   SELECT 'Admin', p FROM (VALUES ('warranty_view'), ('warranty_edit')) AS t(p)
   WHERE EXISTS (SELECT 1 FROM roles WHERE name = 'Admin')
   ON CONFLICT DO NOTHING;
+
+-- ---------- Index cho các cột tra cứu/lọc nhiều (SĐT khách, SKU, lọc theo ngày/khách hàng) ----------
+-- Chưa cần thiết ở quy mô dữ liệu hiện tại, nhưng thêm sẵn để tốc độ tra cứu/báo cáo không chậm dần
+-- khi dữ liệu lớn lên (nhập thêm lịch sử Haravan, bán hàng thực tế).
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
+CREATE INDEX IF NOT EXISTS idx_variants_sku ON product_variants(sku);
+CREATE INDEX IF NOT EXISTS idx_variants_product ON product_variants(product_id);
+CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
+CREATE INDEX IF NOT EXISTS idx_orders_warehouse ON orders(warehouse_id);
+
+-- Chặn nhập trùng đơn Haravan (import lại cùng file/khoảng ngày export chồng lấn) — chỉ áp dụng
+-- cho đơn có external_order_code (đơn tạo tay trong ERP có giá trị NULL nên không bị ảnh hưởng).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_external_code ON orders(external_order_code) WHERE external_order_code IS NOT NULL;

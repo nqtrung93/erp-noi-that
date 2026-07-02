@@ -968,13 +968,14 @@ function HaravanImportModal({ onClose, onDone }) {
       const orders = groupHaravanRows(rows);
       if (!orders.length) { setError("Không đọc được đơn nào từ file — kiểm tra lại cột \"Mã đơn hàng\"."); setBusy(false); return; }
 
-      const agg = { ordersImported: 0, ordersSkipped: 0, linesSkipped: 0, productsCreated: 0, customersCreated: 0, errors: [] };
+      const agg = { ordersImported: 0, ordersSkipped: 0, ordersDuplicate: 0, linesSkipped: 0, productsCreated: 0, customersCreated: 0, errors: [] };
       for (let i = 0; i < orders.length; i += HARAVAN_BATCH_SIZE) {
         const batch = orders.slice(i, i + HARAVAN_BATCH_SIZE);
         setProgress(`Đang nhập ${Math.min(i + HARAVAN_BATCH_SIZE, orders.length)}/${orders.length} đơn…`);
         const res = await ordersService.importHaravanOrders({ warehouseId, orders: batch });
         agg.ordersImported += res.ordersImported;
         agg.ordersSkipped += res.ordersSkipped;
+        agg.ordersDuplicate += res.ordersDuplicate || 0;
         agg.linesSkipped += res.linesSkipped;
         agg.productsCreated += res.productsCreated;
         agg.customersCreated += res.customersCreated;
@@ -1014,6 +1015,9 @@ function HaravanImportModal({ onClose, onDone }) {
         {result && (
           <div className="bg-emerald-50 text-emerald-700 text-sm rounded-lg px-3 py-2 space-y-1">
             <div>Đã nhập {result.ordersImported} đơn. Bỏ qua {result.ordersSkipped} đơn (không có dòng nào khớp được).</div>
+            {result.ordersDuplicate > 0 && (
+              <div>Bỏ qua {result.ordersDuplicate} đơn đã nhập trước đó (trùng mã đơn Haravan).</div>
+            )}
             <div>Bỏ qua {result.linesSkipped} dòng sản phẩm thiếu SKU/số lượng. Tự tạo {result.productsCreated} sản phẩm mới, {result.customersCreated} khách hàng mới.</div>
             {result.errors.length > 0 && (
               <div className="text-amber-700">{result.errors.length} đơn lỗi: {result.errors.slice(0, 5).map((e) => `${e.externalCode} (${e.error})`).join("; ")}{result.errors.length > 5 ? "…" : ""}</div>
